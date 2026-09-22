@@ -7,9 +7,8 @@ data:
   API_TRACKING_URI: "http://mlflow.api.svc.cluster.local:5000"
   API_EXPERIMENT_NAME: "image_classifier"
   # Served model (pick one: model_name OR run_name)
-  API_MODEL_NAME: "TransferLearningClassifier/27"
+  API_MODEL_NAME: "TransferLearningClassifier/23"
   # API_RUN_NAME: "Vits_finetune_cosine_warmup_..."
   # kind has no GPU -- use "cpu" for local compute-references validation;
   # "cuda" only on a real GPU node (cloud phase).
   API_DEVICE: "cpu"
-  API_CROP_SIZE: "224"

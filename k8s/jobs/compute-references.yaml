@@ -1,0 +1,28 @@
+# Job
+apiVersion: batch/v1
+kind: Job
+metadata:
+    name: compute-references
+    namespace: api
+spec:
+    backoffLimit: 2
+    activeDeadlineSeconds: 3600
+    template:
+        spec:
+            containers:
+                - name: compute-references
+                  image: ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/api:latest
+                  command: ["python", "-m", "monitoring.compute_predictions_references"]
+                  envFrom:
+                    - configMapRef:
+                        name: api-config
+                    - secretRef:
+                        name: api-secrets
+                  volumeMounts:
+                    - name: o-drive
+                      mountPath: /mnt/O
+            volumes:
+              - name: o-drive
+                hostPath:
+                  path: /mnt/o-drive
+            restartPolicy: Never
