@@ -18,13 +18,13 @@ export
 # Docker bind mounts generally) require the host path to already exist.
 DATA_PATH := $(abspath ../data)
 REPORTS_PATH := $(abspath ../monitoring/reports)
+
 export DATA_PATH REPORTS_PATH
 
 CLUSTER_NAME := image-classifier
 
 kind-up:
-	mkdir -p $(REPORTS_PATH)
-	envsubst < kind-cluster.yaml | kind create cluster --name $(CLUSTER_NAME) --config -
+	python -c "import os,string,sys; sys.stdout.write(string.Template(open('kind-cluster.yaml').read()).substitute(os.environ))" | kind create cluster --name $(CLUSTER_NAME) --config -
 
 kind-down:
 	kind delete cluster --name $(CLUSTER_NAME)

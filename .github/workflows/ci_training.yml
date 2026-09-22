@@ -6,6 +6,7 @@ on:
     paths:
       - 'src/**'
       - 'tests/training/**'
+      - 'docker/jobs/train/Dockerfile'
       - '.github/workflows/ci_training.yml'
       - '.github/actions/setup-env/'
       - 'requirements/training_req.txt'

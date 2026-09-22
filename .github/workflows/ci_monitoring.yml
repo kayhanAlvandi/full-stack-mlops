@@ -10,6 +10,7 @@ on:
       - 'database/dblogger.py'
       - 'utils/filename_parser.py'
       - 'utils/labels.py'
+      - 'docker/jobs/monitoring/Dockerfile'
       - 'requirements/monitoring_req.txt'
       - 'requirements/db_req.txt'
       - 'requirements/api_req.txt'

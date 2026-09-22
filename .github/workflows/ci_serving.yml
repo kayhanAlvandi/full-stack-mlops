@@ -6,6 +6,7 @@ on:
     paths:
       - 'api/**'
       - 'tests/api/**'
+      - 'docker/services/api/Dockerfile'
       - '.github/workflows/ci_serving.yml'
       - '.github/actions/setup-env/'
       - 'requirements/api_req.txt'
