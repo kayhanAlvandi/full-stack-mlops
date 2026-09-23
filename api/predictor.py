@@ -123,17 +123,22 @@ class TilePredictor:
             run_name=run_name,
         )
         # torchmetrics.Metric submodules (e.g. an accuracy metric logged as
-        # part of the LightningModule) keep a plain `.device` attribute
-        # recorded at save time -- unlike real tensors, mlflow's
-        # map_location doesn't touch it. If the model was trained/saved on
-        # GPU and this predictor targets CPU, that stale attribute makes
-        # Metric._apply() probe a `cuda` tensor during .to(), crashing with
-        # "no NVIDIA driver" on CPU-only hosts even though the target device
-        # is cpu. Force it to match before calling .to() so no submodule
-        # tries to allocate on a device we're not actually using.
+        # part of the LightningModule) keep the device they were on at save
+        # time in a private `_device` attribute -- unlike real tensors,
+        # mlflow's map_location doesn't touch it, and `.device` is a
+        # read-only property backed by that same `_device`, so it can't be
+        # fixed from outside. If the model was trained/saved on GPU and this
+        # predictor targets CPU, that stale `_device` makes Metric._apply()
+        # probe a `cuda` tensor during .to(), crashing with "no NVIDIA
+        # driver" on CPU-only hosts even though the target device is cpu.
+        # Patch the private attribute directly before calling .to() so no
+        # submodule tries to allocate on a device we're not actually using.
         for module in self.model.modules():
-            if isinstance(getattr(module, "device", None), torch.device):
-                module.device = self.device
+            if hasattr(module, "_device"):
+                try:
+                    module._device = self.device
+                except AttributeError:
+                    pass
         self.model.to(self.device)
         self.model.eval()
         

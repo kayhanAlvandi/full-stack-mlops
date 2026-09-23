@@ -56,32 +56,48 @@ class LogBestModelToMLflow(Callback):
         return pl_module.__class__.__name__
 
     def _log_best_model(self, trainer, pl_module) -> None:
+        """Log/register the best model, failing loudly (and tagging the run)
+        instead of silently no-op'ing if registration doesn't happen.
+
+        A run that finishes training without an error but never registers a
+        model is worse than a hard failure: it looks identical to a
+        successful run in MLflow, so a missing registration goes unnoticed
+        until someone tries to load a model that was never actually saved.
+        """
         if self.logged:
             return
 
+        mlflow_logger = self._get_mlflow_logger(trainer)
+        try:
+            self._log_best_model_impl(trainer, pl_module, mlflow_logger)
+        except Exception as e:
+            if mlflow_logger is not None and mlflow_logger.run_id is not None:
+                try:
+                    mlflow_logger.experiment.set_tag(
+                        mlflow_logger.run_id, "model_registration_failed", str(e)[:250]
+                    )
+                except Exception as tag_err:  # noqa: BLE001
+                    rank_zero_info(f"LogBestModelToMLflow: Could not tag run with failure: {tag_err}")
+            raise RuntimeError(f"LogBestModelToMLflow: failed to log/register best model: {e}") from e
+
+    def _log_best_model_impl(self, trainer, pl_module, mlflow_logger) -> None:
         checkpoint_cb = self._get_checkpoint_callback(trainer)
         if checkpoint_cb is None:
-            rank_zero_info("LogBestModelToMLflow: No ModelCheckpoint callback found.")
-            return
+            raise RuntimeError("No ModelCheckpoint callback found.")
 
         best_path = checkpoint_cb.best_model_path
         if not best_path or not Path(best_path).is_file():
-            rank_zero_info("LogBestModelToMLflow: Best checkpoint path not found.")
-            return
+            raise RuntimeError("Best checkpoint path not found.")
 
         current_best = checkpoint_cb.best_model_score
         if current_best is None:
-            rank_zero_info("LogBestModelToMLflow: No best model score available.")
-            return
+            raise RuntimeError("No best model score available.")
 
-        mlflow_logger = self._get_mlflow_logger(trainer)
         if mlflow_logger is None or mlflow_logger.run_id is None:
-            rank_zero_info("LogBestModelToMLflow: MLflow logger/run not available.")
-            return
+            raise RuntimeError("MLflow logger/run not available.")
 
         if self._example_input is None:
-            rank_zero_info("LogBestModelToMLflow: No example input captured.")
-            return
+            raise RuntimeError("No example input captured.")
 
         model = pl_module.__class__.load_from_checkpoint(best_path)
         model.eval()
