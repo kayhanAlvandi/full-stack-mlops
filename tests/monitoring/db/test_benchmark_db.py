@@ -31,7 +31,7 @@ class TestLogBenchmarkSample:
         """Re-registering with a different t_label updates the row."""
         db_logger.log_benchmark_sample((PLATE, "K07", 1, "ClassA"))
         bid = db_logger.log_benchmark_sample((PLATE, "K07", 1, "ClassB"))
-        with db_logger.connection.cursor() as cur:
+        with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute("SELECT t_label FROM benchmark_dataset WHERE id = %s", (bid,))
             assert cur.fetchone()[0] == "ClassB"
 
@@ -47,7 +47,7 @@ class TestLogBenchmarkMembers:
         bid = db_logger.log_benchmark_sample((PLATE, "K07", 1, "ClassA"))
         members = [(bid, img_id, i) for i, img_id in enumerate(img_ids)]
         db_logger.log_benchmark_members(members)
-        with db_logger.connection.cursor() as cur:
+        with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM benchmark_dataset_member WHERE benchmark_id = %s", (bid,))
             assert cur.fetchone()[0] == len(img_ids)
 
@@ -56,7 +56,7 @@ class TestLogBenchmarkMembers:
         bid = db_logger.log_benchmark_sample((PLATE, "K07", 1, "ClassA"))
         members = [(bid, img_ids[i], i) for i in range(len(img_ids))]
         db_logger.log_benchmark_members(members)
-        with db_logger.connection.cursor() as cur:
+        with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT channel_index FROM benchmark_dataset_member "
                 "WHERE benchmark_id = %s ORDER BY channel_index", (bid,))

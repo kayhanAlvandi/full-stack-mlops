@@ -18,7 +18,7 @@ def _count(db_logger, view, where=""):
     sql = f"SELECT COUNT(*) FROM {view}"
     if where:
         sql += f" WHERE {where}"
-    with db_logger.connection.cursor() as cur:
+    with db_logger.pool.connection() as conn, conn.cursor() as cur:
         cur.execute(sql)
         return cur.fetchone()[0]
 

@@ -57,7 +57,7 @@ class TestUpdateTLabel:
         db_logger.log_image_prediction(make_image_prediction_tuple(well="K07", t_label=None))
         n_img, _ = db_logger.update_t_label(PLATE, "K07", "ClassA")
         assert n_img == 1
-        with db_logger.connection.cursor() as cur:
+        with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute("SELECT t_label FROM image_prediction WHERE plate=%s AND well=%s",
                         (PLATE, "K07"))
             assert cur.fetchone()[0] == "ClassA"
@@ -66,7 +66,7 @@ class TestUpdateTLabel:
         """update_t_label only fills NULL t_labels, never overwrites."""
         db_logger.log_image_prediction(make_image_prediction_tuple(well="K07", t_label="OldLabel"))
         db_logger.update_t_label(PLATE, "K07", "NewLabel")
-        with db_logger.connection.cursor() as cur:
+        with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute("SELECT t_label FROM image_prediction WHERE plate=%s AND well=%s",
                         (PLATE, "K07"))
             assert cur.fetchone()[0] == "OldLabel"
@@ -78,7 +78,7 @@ class TestUpdateTLabel:
         )
         n_img, _ = db_logger.update_t_label(PLATE, "K07", "ClassA")
         assert n_img == 0
-        with db_logger.connection.cursor() as cur:
+        with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute("SELECT t_label FROM image_prediction WHERE is_reference=TRUE")
             assert cur.fetchone()[0] is None
 
@@ -117,7 +117,7 @@ class TestUpdateTLabel:
         n_img, n_tile = db_logger.update_t_label(PLATE, "K07", "ClassA")
         assert n_img == 1
         assert n_tile == 1
-        with db_logger.connection.cursor() as cur:
+        with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute("SELECT t_label FROM tile_prediction WHERE image_pred_id = %s", (img_pred_id,))
             assert cur.fetchone()[0] == "ClassA"
 

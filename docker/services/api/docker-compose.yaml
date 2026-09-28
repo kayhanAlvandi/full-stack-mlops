@@ -8,6 +8,7 @@ services:
       - "8000:8000"
     volumes:
       - ${O_DRIVE_PATH}:/mnt/O:rw
+      - ../../../mlflow-data/mlruns:/mnt/mlruns:ro ## for loading models fast instead of downloading from mlflow
     restart: unless-stopped
     deploy:
       resources:
