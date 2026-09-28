@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - config/api-configs.yaml
+  - config/monitoring-configs.yaml
+  - config/api-secrets.yaml
+  - config/monitoring-secrets.yaml
+  - config/ghcr-pull-secret.yaml
+  - external-services/api.yaml
+  - external-services/mlflow.yaml
+  - external-services/postgres.yaml

@@ -5,6 +5,6 @@ metadata:
   namespace: monitoring
 data:
     # Base URL of the running API, used to read the served model's run_id from /model
-    MONITORING_BASE_URL: "http://api.api.svc.cluster.local:8000"
+    MONITORING_BASE_URL: "http://api-service.api:8000"
 
   

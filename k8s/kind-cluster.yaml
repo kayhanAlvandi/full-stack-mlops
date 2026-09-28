@@ -2,6 +2,12 @@ kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
   - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
     extraMounts:
       # DATA_PATH is derived (not hand-set) -- see k8s/Makefile, it's always
       # "<repo>/data" on whatever machine this runs on.
@@ -11,8 +17,23 @@ nodes:
         containerPath: /mnt/o-drive
       - hostPath: ${TOOLS_LIB_PATH}
         containerPath: /mnt/tools
+      # MLflow artifact store (the mlruns dir only -- mlflow.db stays
+      # private to the tracking server) -- api pods read model/config
+      # artifacts directly off disk (API_ARTIFACT_ROOT) instead of
+      # downloading them through the tracking server at pod startup.
+      - hostPath: ${MLFLOW_DATA_PATH}
+        containerPath: /mnt/mlruns
       # rw in the pods that use it (drift-report, quality-report) -- this
       # extraMount is just node-level plumbing, read-only-ness is set on the
       # pod's volumeMount, not here.
       - hostPath: ${REPORTS_PATH}
         containerPath: /mnt/monitoring-reports
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP
+
+

@@ -6,6 +6,7 @@ metadata:
     namespace: monitoring
 spec:
     backoffLimit: 2
+    ttlSecondsAfterFinished: 300   # Job + pod deleted 5min after completion
     activeDeadlineSeconds: 3600
     template:
         spec:
