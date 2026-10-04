@@ -69,3 +69,39 @@ bootstrap-dev: load-api-image addons
 	kubectl apply -f namespaces/ || kubectl apply -f namespaces/
 	kubectl apply -k .
 
+# ── Simulate live prediction traffic ─────────────────────────────────────
+# Exercise the served API with the manifest-driven traffic generator
+# (scripts/simulate_live_predictions.py) two ways:
+#
+#   simulate-internal -- from a pod *inside* the cluster, hitting the API's
+#                        in-cluster Service DNS. Proves pod-to-pod serving
+#                        (Service + readiness gating) independent of ingress.
+#                        Runs in the debug-simulate-live pod, which carries the
+#                        data/O-drive host mounts; `requests` is already in the
+#                        api image (pulled in by mlflow), so no extra install.
+#   simulate-external -- from the host, hitting the ingress hostname. Proves
+#                        ingress-nginx routes external traffic to the API.
+#
+# Override the traffic args per run, e.g.:
+#   make simulate-internal INTERNAL_ARGS="--manifest /mnt/data/custom_v1/dataset_manifest.json --count 20"
+#   make simulate-external EXTERNAL_ARGS="--manifest ../data/custom_v1/dataset_manifest.json --loop"
+SIM_POD := simulate-live
+SIM_SCRIPT := ../scripts/simulate_live_predictions.py
+INTERNAL_ARGS ?= --manifest /mnt/data/custom_v1/dataset_manifest.json --count 10
+EXTERNAL_ARGS ?= --manifest ../data/custom_v1/dataset_manifest.json --count 10
+
+simulate-internal:
+	kubectl apply -f jobs/debug-simulate-live.yaml
+	kubectl wait --for=condition=Ready pod/$(SIM_POD) -n api --timeout=180s
+	kubectl cp $(SIM_SCRIPT) api/$(SIM_POD):/tmp/simulate_live_predictions.py
+	kubectl exec -it -n api $(SIM_POD) -- \
+		python /tmp/simulate_live_predictions.py \
+		--base-url http://api-service.api.svc.cluster.local:8000 $(INTERNAL_ARGS)
+
+# Remove the debug pod when done (it just sleeps infinity otherwise).
+simulate-internal-clean:
+	kubectl delete -f jobs/debug-simulate-live.yaml --ignore-not-found
+
+simulate-external:
+	python $(SIM_SCRIPT) --base-url http://api.localtest.me $(EXTERNAL_ARGS)
+

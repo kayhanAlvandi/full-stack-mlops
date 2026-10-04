@@ -83,6 +83,7 @@ Airflow is the most widely-adopted and most transferable to learn first, which i
 ### This project's planned DAGs (sketch — refine once Phases 1–2 land)
 
 1. **DAG 1 — weekly monitoring:** `label_backfill → run_quality_report (depends on backfill)` and `run_drift_report` (parallel) → branch (alert vs. no-op) on regression thresholds. Alerting channel still TBD.
+   - **Open decision (moved from `kubernetes-plan.md`):** the scheduling mechanism for these weekly jobs — K8s `CronJob`s vs. this Airflow DAG. The jobs already exist as plain `Job` manifests (`k8s/jobs/{label-backfill,drift-report,quality-report}.yaml`). Leaning Airflow, so the dependency/branch/alert logic lives in one place rather than being split across CronJob schedules + a DAG; decide when Airflow is actually stood up.
 2. **DAG 2 — promotion:** discover MLflow versions tagged `benchmark_test` → skip any already scored (idempotent: check `benchmark_quality` for the run_id) → fan out `compute_predictions_references(--target benchmark)` per new candidate → `compute_benchmark_quality` (upsert) → compare all candidates + current `@champion` in DB with **threshold + best** rule → conditional `set_champion_alias` → downstream redeploy/reload trigger.
 3. Practice-oriented features to deliberately exercise: backfill/reprocessing over date-partitioned monitoring windows (`window_start`/`window_end`), sensors polling MLflow for new `benchmark_test` tags, dynamic task mapping for the candidate fan-out.
 4. Prereqs this surfaces for other code (tracked, not built yet):

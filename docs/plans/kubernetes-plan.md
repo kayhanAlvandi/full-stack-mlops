@@ -96,8 +96,13 @@ Proposed layout: new `k8s/` dir with `namespace.yaml`, `jobs/`, `cronjobs/`, `se
 ### Milestone 2B — translate the jobs
 7. One-off `Job` manifests (mechanical translation of `docker compose run --rm`):
    - `jobs/register-benchmark.yaml`, `jobs/compute-references.yaml` (uses api image). **No `jobs/train.yaml`** — training-as-K8s-Job is deliberately deferred to the cloud phase (see "Why `training` is excluded" in Phase 1); on `kind` (no GPU) it would offer zero benefit over `make train-run`.
-8. `CronJob` manifests for the weekly pipelines:
-   - `cronjobs/label-backfill.yaml`, `cronjobs/drift-report.yaml`, `cronjobs/quality-report.yaml` with `schedule`, `backoffLimit`, `activeDeadlineSeconds`, `concurrencyPolicy: Forbid`, `startingDeadlineSeconds`.
+8. Weekly pipelines (`label-backfill`, `drift-report`, `quality-report`) ship
+   as plain one-off `Job` manifests for now (triggered manually / on demand).
+   **The scheduling mechanism is deferred** — whether the weekly cadence is
+   driven by K8s `CronJob`s or by an Airflow DAG is an open decision moved to
+   `airflow-terraform-overview.md` (DAG 1). Revisit once Airflow lands; if it
+   stays on K8s, wrap these Jobs in `CronJob`s with `schedule`, `backoffLimit`,
+   `activeDeadlineSeconds`, `concurrencyPolicy: Forbid`, `startingDeadlineSeconds`.
 9. **Volumes/mounts:** the reports dir and data/image mounts (`${O_DRIVE_PATH}`, `${TOOLS_LIB_PATH}`, `monitoring/reports`, `data/`) become `hostPath` for kind-local testing (explicitly flagged as a stand-in) or `PVC`s; the external `tools` lib editable-install entrypoint carries over unchanged in the image. Prefer manifest mode for register-benchmark to avoid the image/tools/Mongo mounts entirely.
 10. **imagePullPolicy / pull secrets:** reference GHCR images; if packages are private, add an `imagePullSecret`.
 
@@ -246,6 +251,6 @@ mirrors real systems rather than cargo-culting:
   - [ ] End-to-end verification (trigger workflows, confirm GHCR packages, `docker pull`/`docker run`)
 - [ ] Phase 2: Kubernetes
   - [ ] 2A: cluster + config + ExternalName services (postgres + mlflow stay external)
-  - [ ] 2B: Job/CronJob manifests (no training Job — see Phase 1 rationale)
+  - [x] 2B: Job manifests (plain `Job`s; CronJob scheduling deferred to the Airflow phase — see airflow-terraform-overview.md; no training Job — see Phase 1 rationale)
   - [ ] 2C: validate end-to-end
   - [ ] 2D: API Deployment + Service + HPA + rollout-on-model-change (canary/shadow deferred to the Airflow promotion step)
