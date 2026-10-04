@@ -1,3 +1,0 @@
-
-2. make better integeration of kubernette, change plan completly
-to add useful cases in explanation to the implementation steps

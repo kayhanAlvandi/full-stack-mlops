@@ -130,6 +130,28 @@ larger scale with a job queue.
 **Status:** Not required for the current smoke test; revisit when benchmark
 versions need to be compared, audited, or reproduced across environments.
 
+## Serving: queue-based inference (deferred)
+
+**Context:**
+`/predict` is currently synchronous request/response with a semaphore-bounded
+threadpool + CPU-based HPA. That remains correct for interactive, seconds-level
+inference. This item is parked, not prioritized.
+
+**Idea:**
+Move to job-submission semantics: `POST /predict` enqueues and returns
+`202 + job_id`; workers (separate Deployment reusing `TilePredictor` +
+`DBLogger`, no HTTP layer) pull jobs; `GET /predict/{job_id}` returns
+status/result.
+
+- **Queue**: Redis (self-hosted, matches current footprint) or SQS if this
+  ever goes to cloud.
+- **Autoscaling**: KEDA scaled-object on queue depth — a better signal than
+  CPU utilization since queue depth *is* the backlog, CPU lags behind it.
+
+**When to revisit:** inference grows to minutes-long per image (clients can't
+hold a connection that long anyway), or traffic becomes batchy/bulk-submission
+rather than interactive.
+
 ## Monitoring smoke test
 
 Completed end-to-end against real data, real Postgres, real MLflow, and real
