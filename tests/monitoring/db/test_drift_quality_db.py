@@ -175,7 +175,7 @@ class TestLogDriftReport:
         report_id = db_logger.log_drift_report(
             (RUN_ID, start, now, True, 3, 10, "/reports/drift_2")
         )
-        with db_logger.connection.cursor() as cur:
+        with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT run_id, window_start, window_end, dataset_drift, "
                 "n_columns_drifted, n_columns_total, report_path "
@@ -202,7 +202,7 @@ class TestLogDriftReportColumn:
         ]
         n = db_logger.log_drift_report_column(columns)
         assert n == 3
-        with db_logger.connection.cursor() as cur:
+        with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM drift_report_column WHERE drift_report_id = %s", (report_id,))
             assert cur.fetchone()[0] == 3
 
@@ -223,7 +223,7 @@ class TestLogQualityReport:
         report_id = db_logger.log_quality_report(
             (RUN_ID, start, now, 64, 20, 0.5781, 0.5051, 0.5821, 0.4611, "/reports/q")
         )
-        with db_logger.connection.cursor() as cur:
+        with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT n_benchmark_samples, n_current_samples, "
                 "benchmark_accuracy, benchmark_f1, current_accuracy, current_f1 "

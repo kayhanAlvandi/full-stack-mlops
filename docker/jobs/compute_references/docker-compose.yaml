@@ -16,6 +16,7 @@
 services:
   compute-predictions-references:
     image: ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/api:latest
+    pull_policy: always
     container_name: compute_predictions_references
     env_file: .env.api
     volumes:

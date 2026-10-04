@@ -1,0 +1,30 @@
+# Job
+apiVersion: batch/v1
+kind: Job
+metadata:
+    name: drift-report
+    namespace: monitoring
+spec:
+    backoffLimit: 2
+    ttlSecondsAfterFinished: 300   # Job + pod deleted 5min after completion
+    activeDeadlineSeconds: 3600
+    template:
+        spec:
+            containers:
+                - name: drift-report
+                  image: ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/monitoring:latest
+                  command: ["python","-m" ,"monitoring.run_drift_report"]
+                  envFrom:
+                    - configMapRef:
+                        name: monitoring-config
+                    - secretRef:
+                        name: monitoring-secret
+                  volumeMounts:
+                    - name: reports
+                      mountPath: /app/monitoring/reports
+                      readOnly: false
+            volumes:
+              - name: reports
+                hostPath:
+                  path: /mnt/monitoring-reports
+            restartPolicy: Never

@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-deployment
+  namespace: api
+spec:
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+      - name: api
+        image: ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/api:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - configMapRef:
+            name: api-config
+        - secretRef:
+            name: api-secrets
+        # Required for CPU-based HPA: %-utilization targets are computed
+        # relative to `requests.cpu`, not `limits.cpu`.
+        resources:
+          requests:
+            cpu: 1000m
+            memory: 1Gi
+          limits:
+            cpu: "2"
+            memory: 4Gi
+        volumeMounts:
+        - name: o-drive
+          mountPath: /mnt/O
+          readOnly: true
+        - name: mlruns
+          mountPath: /mnt/mlruns
+          readOnly: true
+        ## wait 600 seconds  (download artifact and load model takes time)
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          failureThreshold: 60
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        ## get trafic only if model is loaded
+        readinessProbe:
+          httpGet:
+            path: /model
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        
+      volumes:
+      - name: o-drive
+        hostPath:
+          path: /mnt/o-drive
+          type: Directory
+      - name: mlruns
+        hostPath:
+          path: /mnt/mlruns
+          type: Directory
+  

@@ -111,11 +111,13 @@ class TilePredictor:
         crop_size: int = 224,
         stride: int | None = None,
         device: str = "cpu",
-        db_logger: DBLogger | None = None
+        db_logger: DBLogger | None = None,
+        artifact_root: str | None = None
     ):
         self.device = torch.device(device)
         self.tracking_uri = tracking_uri
         self.experiment_name = experiment_name
+        self.artifact_root = Path(artifact_root) if artifact_root else None
         
         # Load model and extract config from MLflow artifacts
         self.model, self.model_info = self._load_model(
@@ -154,76 +156,121 @@ class TilePredictor:
     
     def _load_model(self, model_name: str, run_name: str):
         """Load model with priority: model_name > run_name.
-        
-        For MLflow sources, also downloads hydra_config.yaml and dataset_manifest.json
+
+        For MLflow sources, also reads hydra_config.yaml and dataset_manifest.json
         to auto-configure class names, crop size, channels, etc.
         """
-        run_id = None
-        model = None
         info = {}
-        
+
         mlflow.set_tracking_uri(self.tracking_uri)
-        
-        # ── 1. Load from MLflow registered model (e.g. "TransferLearning/20") ──
+
+        # ── 1. Resolve run_id (registry or run name -- metadata calls only) ──
         if model_name:
-            run_id, model = self._load_from_registry(model_name)
+            run_id = self._run_id_from_registry(model_name)
             info["source"] = f"registry:{model_name}"
-        
-        # ── 2. Load from MLflow run name ──
         elif run_name:
-            run_id, model = self._load_from_run_name(run_name)
+            run_id = self._run_id_from_name(run_name)
             info["source"] = f"run_name:{run_name}"
-        
         else:
             raise ValueError(
                 "No model source specified. Set one of: "
                 "model_name (e.g. 'TransferLearning/20') or "
                 "run_name (e.g. 'my_training_run')"
             )
-        
+
+        # ── 2. Locate artifacts: mounted artifact store first, else HTTP ──
+        run_artifacts_dir, model_dir = self._resolve_local_artifacts(run_id)
+
+        if model_dir is not None:
+            try:
+                print(f"  Loading model from artifact store: {model_dir}")
+                model = mlflow.pytorch.load_model(str(model_dir), map_location=self.device)
+                print("  ✓ Loaded from artifact store")
+            except Exception as e:  # noqa: BLE001
+                print(f"  Local load failed ({e}); falling back to download")
+                model = self._load_model_from_run(run_id, mlflow.MlflowClient())
+        else:
+            model = self._load_model_from_run(run_id, mlflow.MlflowClient())
+
         # Extract config from MLflow run artifacts if we have a run_id.
         # class_names order must match the model's output logits exactly, so
         # this must come from dataset_metadata.json -- no silent fallback to
         # a guessed/differently-ordered class list, or every prediction gets
         # mislabeled without any indication something went wrong.
-        if not run_id:
-            raise ValueError("No run_id resolved; cannot load artifacts")
-        info.update(self._load_run_config(run_id))
+        info.update(self._load_run_config(run_id, run_artifacts_dir))
         info["run_id"] = run_id
         info["model_class"] = model.__class__.__name__
         info["num_classes"] = model.num_classes
-        
+
         return model, info
-    
-    def _load_from_registry(self, model_ref: str):
-        """Load from MLflow model registry. e.g. 'TransferLearning/20' or 'TransferLearning/latest'."""
+
+    def _resolve_local_artifacts(self, run_id: str) -> tuple[Path | None, Path | None]:
+        """Locate (run_artifacts_dir, model_dir) under the mounted artifact store.
+
+        When ``artifact_root`` points at the tracking server's artifact store
+        (its mlruns dir), artifact bytes are read straight off disk -- the same
+        'client reads storage directly' pattern as ``s3://`` artifact URIs,
+        with the filesystem as the store. The tracking server is still used
+        for metadata: the run's experiment_id and its logged-model link.
+        Returns ``(None, None)`` when unset or the run's artifacts aren't
+        there, so callers fall back to downloading via the tracking server.
+        """
+        if self.artifact_root is None:
+            return None, None
+        try:
+            run = mlflow.get_run(run_id)
+        except Exception as e:  # noqa: BLE001
+            print(f"  Could not fetch run metadata ({e}); falling back to download")
+            return None, None
+
+        root = self.artifact_root / run.info.experiment_id
+
+        run_artifacts_dir = root / run_id / "artifacts"
+        if not run_artifacts_dir.is_dir():
+            run_artifacts_dir = None
+
+        # runs:/<run_id>/model resolves through the run's logged-model link;
+        # prefer the entry named "model" like that URI does, else take the
+        # latest logged model.
+        model_dir = None
+        outputs = list(run.outputs.model_outputs) if run.outputs else []
+        if outputs:
+            chosen = next(
+                (o for o in outputs if getattr(o, "name", None) == "model"),
+                outputs[-1],
+            )
+            candidate = root / "models" / chosen.model_id / "artifacts"
+            if (candidate / "MLmodel").is_file():
+                model_dir = candidate
+
+        return run_artifacts_dir, model_dir
+
+    def _run_id_from_registry(self, model_ref: str) -> str:
+        """Resolve 'Name/version' (or 'Name/latest') to its source run_id."""
         client = mlflow.MlflowClient()
-        
+
         ref = model_ref.removeprefix("models:/")
         parts = ref.split("/")
         name = parts[0]
         version = parts[1] if len(parts) > 1 else "latest"
-        
+
         if version == "latest":
             versions = client.get_latest_versions(name)
             if not versions:
                 raise ValueError(f"No versions found for registered model '{name}'")
             version = versions[0].version
             print(f"Resolved 'latest' -> version {version} for model '{name}'")
-        
+
         mv = client.get_model_version(name, version)
-        run_id = mv.run_id
-        print(f"Loading {name}/v{version} (run_id={run_id[:8]}...)")
-        
-        model = self._load_model_from_run(run_id, client)
-        return run_id, model
-    
-    def _load_from_run_name(self, run_name: str):
-        """Load from MLflow run by its display name."""
+        print(f"Loading {name}/v{version} (run_id={mv.run_id[:8]}...)")
+        return mv.run_id
+
+    def _run_id_from_name(self, run_name: str) -> str:
+        """Resolve an MLflow run's display name to its run_id."""
         experiment = mlflow.get_experiment_by_name(self.experiment_name)
         if experiment is None:
             raise ValueError(f"Experiment '{self.experiment_name}' not found")
-        
+
         runs = mlflow.search_runs(
             experiment_ids=[experiment.experiment_id],
             filter_string=f"run_name = '{run_name}'",
@@ -232,13 +279,10 @@ class TilePredictor:
         )
         if runs.empty:
             raise ValueError(f"No run found with name '{run_name}' in experiment '{self.experiment_name}'")
-        
+
         run_id = runs.iloc[0].run_id
         print(f"Found run '{run_name}' (run_id={run_id[:8]}...)")
-        
-        client = mlflow.MlflowClient()
-        model = self._load_model_from_run(run_id, client)
-        return run_id, model
+        return run_id
     
     def _load_model_from_run(self, run_id: str, client):
         """Load model from a run: run artifact -> registry.
@@ -279,15 +323,19 @@ class TilePredictor:
         )
         return artifact_dir
     
-    def _load_run_config(self, run_id: str) -> dict:
+    def _load_run_config(self, run_id: str, artifact_dir: Path | None = None) -> dict:
         """Extract crop_size, channels, class_names from MLflow run artifacts."""
         info = {}
-        try:
-            info['artifact_dir'] = self._download_artifact(run_id)
-        except Exception as e: 
-            raise RuntimeError(
-                f"Could not download artifacts for run {run_id}"
-            ) from e
+        if artifact_dir is None:
+            try:
+                artifact_dir = self._download_artifact(run_id)
+            except Exception as e:
+                raise RuntimeError(
+                    f"Could not download artifacts for run {run_id}"
+                ) from e
+        else:
+            print(f"  Using artifact store: {artifact_dir}")
+        info['artifact_dir'] = str(artifact_dir)
         
         try:
             config_path = Path(info['artifact_dir']) / "hydra_config.yaml"
@@ -345,11 +393,13 @@ class TilePredictor:
         tensor = torch.from_numpy(np.stack(processed_channels, axis=0))
         return tensor
     
-    def tile_image(self, image: torch.Tensor) -> list[dict]:
+    def tile_image(self, image: torch.Tensor, crop_size: int, stride: int) -> list[dict]:
         """Split image into non-overlapping (or strided) tiles.
         
         Args:
             image: Tensor of shape (C, H, W)
+            crop_size: Size of each tile
+            stride: Stride for tile extraction
             
         Returns:
             List of dicts with keys: 'tile' (C, crop_size, crop_size), 'row', 'col', 'y', 'x'
@@ -444,12 +494,14 @@ class TilePredictor:
             "vote_fraction": winner_count / len(tile_predictions),
         }
     
-    def predict(self, channels_image: list[np.ndarray], image_metadata: dict) -> dict:
+    def predict(self, channels_image: list[np.ndarray], image_metadata: dict, crop_size: int | None = None, stride: int | None = None) -> dict:
         """Full prediction pipeline: preprocess -> tile -> predict -> majority vote.
         
         Args:
             channels_image: list of numpy arrays of shape (H, W), raw pixel values
             image_metadata: dictionary containg plate,well,field, root_path ,shape, channels [list of channel names in order of image channels], channel_files [list of filenames in order of image channels], and optionally label and is_reference
+            crop_size: Size of each tile
+            stride: Stride for tile extraction
             
         Returns:
             Dict with 'tile_predictions' and 'image_prediction' (majority vote)
@@ -469,8 +521,13 @@ class TilePredictor:
         # Preprocess
         tensor = self.preprocess_image(image)
 
+        if crop_size is None:
+            crop_size = self.crop_size
+        if stride is None:
+            stride = self.stride
+        assert crop_size is not None and stride is not None, "crop_size and stride must be provided or set in the model"
         # Tile
-        tiles = self.tile_image(tensor)
+        tiles = self.tile_image(tensor, crop_size, stride)
 
 
         if self.db_logger:

@@ -25,7 +25,13 @@ class Settings(BaseSettings):
     
     # ── Device ───────────────────────────────────────────────────────────
     device: str = "cpu"
-    
+
+    # ── Artifact store ───────────────────────────────────────────────────
+    # Local path to the tracking server's artifact store (its mlruns dir).
+    # When set and the run's artifacts exist there, they're read straight
+    # off disk instead of being HTTP-proxied through the tracking server.
+    artifact_root: str | None = None
+
     # ── Database ─────────────────────────────────────────────────────────
     db_uri: str | None = None
     

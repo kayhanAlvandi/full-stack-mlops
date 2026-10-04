@@ -79,11 +79,11 @@ Unlike `api`/`monitoring` (stable artifacts meant to run unchanged until deliber
 
 ## Phase 2 — Kubernetes (local kind first, cloud-portable)
 
-**Goal:** run the ephemeral jobs as K8s `Job`/`CronJob`. **Postgres and mlflow stay external** (not in-cluster) — jobs connect out to them. Plain manifests first (Kustomize/Helm deferred). Decisions locked with the user: **kind**, **postgres + mlflow external**, **plain manifests**, images pulled from **GHCR**.
+**Goal:** run the ephemeral jobs as K8s `Job`/`CronJob`, and the API as a `Deployment` + `Service` + `HorizontalPodAutoscaler` (serving moves over once the jobs are proven; the API is what makes K8s' rolling-update/rollout story worth practicing — see Milestone 2D). **Postgres and mlflow stay external** (not in-cluster) — jobs and the API connect out to them. Plain manifests first (Kustomize/Helm deferred). Decisions locked with the user: **kind**, **postgres + mlflow external**, **plain manifests**, images pulled from **GHCR**.
 
 Why external: Postgres is shared infra managed by its own compose (`D:\personal_project\pgSQL\docker-compose.yml`, stock `postgres:16`, `pg_data` volume) hosting multiple projects; this project only owns the `prediction` DB. mlflow is stateful via host files (`sqlite:////mlflow.db` + `/mlruns`). Keeping both external is also the realistic production pattern (managed data services outside the app cluster) and lets the whole DB lift to a cloud managed DB later.
 
-Proposed layout: new `k8s/` dir with `namespace.yaml`, `jobs/`, `cronjobs/`, `config/` (ConfigMaps/Secrets), `README.md`. (No `postgres/`, no `mlflow/`.)
+Proposed layout: new `k8s/` dir with `namespace.yaml`, `jobs/`, `cronjobs/`, `serving/`, `config/` (ConfigMaps/Secrets), `README.md`. (No `postgres/`, no `mlflow/`.)
 
 ### Milestone 2A — cluster + external-service connectivity
 1. `k8s/kind-cluster.yaml` — kind config: 1 control-plane + 1 worker. Document `kind create cluster --config`.
@@ -96,8 +96,13 @@ Proposed layout: new `k8s/` dir with `namespace.yaml`, `jobs/`, `cronjobs/`, `co
 ### Milestone 2B — translate the jobs
 7. One-off `Job` manifests (mechanical translation of `docker compose run --rm`):
    - `jobs/register-benchmark.yaml`, `jobs/compute-references.yaml` (uses api image). **No `jobs/train.yaml`** — training-as-K8s-Job is deliberately deferred to the cloud phase (see "Why `training` is excluded" in Phase 1); on `kind` (no GPU) it would offer zero benefit over `make train-run`.
-8. `CronJob` manifests for the weekly pipelines:
-   - `cronjobs/label-backfill.yaml`, `cronjobs/drift-report.yaml`, `cronjobs/quality-report.yaml` with `schedule`, `backoffLimit`, `activeDeadlineSeconds`, `concurrencyPolicy: Forbid`, `startingDeadlineSeconds`.
+8. Weekly pipelines (`label-backfill`, `drift-report`, `quality-report`) ship
+   as plain one-off `Job` manifests for now (triggered manually / on demand).
+   **The scheduling mechanism is deferred** — whether the weekly cadence is
+   driven by K8s `CronJob`s or by an Airflow DAG is an open decision moved to
+   `airflow-terraform-overview.md` (DAG 1). Revisit once Airflow lands; if it
+   stays on K8s, wrap these Jobs in `CronJob`s with `schedule`, `backoffLimit`,
+   `activeDeadlineSeconds`, `concurrencyPolicy: Forbid`, `startingDeadlineSeconds`.
 9. **Volumes/mounts:** the reports dir and data/image mounts (`${O_DRIVE_PATH}`, `${TOOLS_LIB_PATH}`, `monitoring/reports`, `data/`) become `hostPath` for kind-local testing (explicitly flagged as a stand-in) or `PVC`s; the external `tools` lib editable-install entrypoint carries over unchanged in the image. Prefer manifest mode for register-benchmark to avoid the image/tools/Mongo mounts entirely.
 10. **imagePullPolicy / pull secrets:** reference GHCR images; if packages are private, add an `imagePullSecret`.
 
@@ -107,9 +112,40 @@ Proposed layout: new `k8s/` dir with `namespace.yaml`, `jobs/`, `cronjobs/`, `co
 13. Let a `CronJob` fire on a short test schedule, confirm, then set real weekly schedules.
 14. `k8s/README.md` documenting the full up/down/run workflow (kind create, kubectl apply order, teardown).
 
+### Milestone 2D — API serving on K8s
+Moves the API off docker compose once the jobs are proven (2A–2C). This is
+also where K8s starts paying off beyond "compose but harder": replicas,
+readiness-gated rolling updates, and autoscaling.
+15. `k8s/serving/api-deployment.yaml` — `Deployment` (replicas: 2) running
+    the `api` image from GHCR: `envFrom` the api ConfigMap
+    (`API_TRACKING_URI` → the mlflow ExternalName service,
+    `API_EXPERIMENT_NAME`, `API_MODEL_NAME` or `API_RUN_NAME`,
+    `API_CROP_SIZE`, `API_DEVICE=cpu`) + Secret (`API_DB_URI`); resource
+    requests/limits (torch inference is memory-heavy at model load).
+    **Probes:** the model is loaded in the FastAPI `lifespan` handler
+    before the server accepts connections (`api/main.py`), so a slow first
+    artifact download must not trip liveness — `startupProbe` on `/health`
+    with a generous `failureThreshold`, then `readinessProbe` +
+    `livenessProbe` on `/health` (which reports `model_loaded`, `device`,
+    `database_connected`).
+16. `k8s/serving/api-service.yaml` + `k8s/serving/api-hpa.yaml` — `Service`
+    (`ClusterIP`; `kubectl port-forward` or `NodePort` for local kind
+    access) and `HorizontalPodAutoscaler` (`autoscaling/v2`, CPU-based,
+    e.g. min 1 / max 3).
+17. **Rollout on model change** (this phase's version of promotion): the
+    model source is pinned in the ConfigMap and resolved at pod startup, so
+    a champion change = update the ConfigMap value, then
+    `kubectl rollout restart deployment/api` — a readiness-gated rolling
+    restart: zero-downtime reload, and the rollout halts automatically if
+    the new model fails to load. Document the two-command flow in
+    `k8s/README.md`; the Airflow promotion step later upgrades this to
+    canary/shadow (deferred item below).
+
 ### Deferred within Phase 2 (recorded, not built now)
-- API serving on K8s (`Deployment` + `Service` + `HPA`) — stays on docker compose until after jobs are proven.
-- Canary/shadow serving for promotion (see rationale below) — the eventual reason to move serving onto K8s.
+- Canary/shadow serving for promotion (see rationale below) — the eventual
+  reason serving is on K8s; arrives with the Airflow-driven promotion step.
+  Milestone 2D already ships the simpler version: a readiness-gated rolling
+  restart on model change.
 - Kustomize base + `local`/`cloud` overlays — introduce once manifest duplication is felt.
 - Real GPU scheduling (node affinity/taints/tolerations) — needs a GPU node, i.e. cloud phase.
 
@@ -175,6 +211,9 @@ mirrors real systems rather than cargo-culting:
   and only flip the `@champion` alias + primary `Service` selector after it
   proves out online. A real online+offline evaluation pattern that requires
   K8s-style multi-deployment traffic management — compose has no good answer.
+  Phased: Milestone 2D ships the simpler readiness-gated rolling restart on
+  model change now; full shadow/canary arrives with the Airflow promotion
+  step.
 - **Config/secrets/resource isolation** across mlflow/postgres/api/jobs via
   namespaces, `ConfigMap`/`Secret`, resource quotas — practicing the K8s
   object model itself.
@@ -192,7 +231,8 @@ mirrors real systems rather than cargo-culting:
 ## Suggested execution order
 1. Phase 1 (CD → GHCR) end-to-end, including baking training code.
 2. Phase 2A (cluster + postgres + mlflow), then 2B (jobs/cronjobs), then 2C (validate).
-3. Move on to `airflow-terraform-overview.md` once 1–2 are working.
+3. Phase 2D (API Deployment + Service + HPA + rollout-on-model-change) once jobs are proven.
+4. Move on to `airflow-terraform-overview.md` once 1–3 are working — the Airflow promotion step is what upgrades rollout-on-change to canary/shadow.
 
 ---
 
@@ -211,5 +251,6 @@ mirrors real systems rather than cargo-culting:
   - [ ] End-to-end verification (trigger workflows, confirm GHCR packages, `docker pull`/`docker run`)
 - [ ] Phase 2: Kubernetes
   - [ ] 2A: cluster + config + ExternalName services (postgres + mlflow stay external)
-  - [ ] 2B: Job/CronJob manifests (no training Job — see Phase 1 rationale)
+  - [x] 2B: Job manifests (plain `Job`s; CronJob scheduling deferred to the Airflow phase — see airflow-terraform-overview.md; no training Job — see Phase 1 rationale)
   - [ ] 2C: validate end-to-end
+  - [ ] 2D: API Deployment + Service + HPA + rollout-on-model-change (canary/shadow deferred to the Airflow promotion step)

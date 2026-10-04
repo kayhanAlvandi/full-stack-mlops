@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+# Attach the GHCR pull secret to the namespace's default ServiceAccount so
+# every pod here inherits it -- no per-pod imagePullSecrets needed. Requires
+# the `ghcr-pull` secret to exist in this namespace (see
+# config/ghcr-pull-secret.example.yaml). Harmless if images are public.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: default
+  namespace: monitoring
+imagePullSecrets:
+  - name: ghcr-pull

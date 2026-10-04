@@ -53,8 +53,8 @@ def find_model_versions_for_runs(client: MlflowClient, run_ids: set[str]) -> lis
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--tracking-uri", default="http://localhost:5000", help="MLflow tracking URI")
-    parser.add_argument("--backend-store-uri", default="sqlite:////mlflow.db", help="Backend store URI passed to `mlflow gc`")
-    parser.add_argument("--artifacts-destination", default="/mlruns", help="Artifact root passed to `mlflow gc`")
+    parser.add_argument("--backend-store-uri", default="sqlite:////mlflow-data/mlflow.db", help="Backend store URI passed to `mlflow gc`")
+    parser.add_argument("--artifacts-destination", default="/mlflow-data/mlruns", help="Artifact root passed to `mlflow gc`")
     parser.add_argument("--older-than", default=None, help="Only purge runs deleted more than this long ago, e.g. '30d'")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be deleted without deleting anything")
     args = parser.parse_args()
@@ -93,7 +93,7 @@ def main():
         gc_cmd += ["--older-than", args.older_than]
 
     print(f"\nRunning: {' '.join(gc_cmd)}")
-    result = subprocess.run(gc_cmd)
+    result = subprocess.run(gc_cmd, check=False)
     sys.exit(result.returncode)
 
 

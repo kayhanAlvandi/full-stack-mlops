@@ -14,6 +14,8 @@ services:
       context: ../../..
       dockerfile: docker/services/api/Dockerfile
     image: api:dev
+    environment:
+      PYTHONUNBUFFERED: "1"
     volumes:
       - ../../../api:/app/api:ro
       - ../../../utils:/app/utils:ro

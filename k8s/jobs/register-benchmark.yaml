@@ -1,0 +1,41 @@
+# Job
+apiVersion: batch/v1
+kind: Job
+metadata:
+    name: register-benchmark
+    namespace: monitoring
+spec:
+    backoffLimit: 2
+    ttlSecondsAfterFinished: 300   # Job + pod deleted 5min after completion
+    activeDeadlineSeconds: 3600
+    template:
+        spec:
+            containers:
+                - name: register-benchmark
+                  image: ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/monitoring:latest
+                  command: ["python","-m" ,"monitoring.register_benchmark"]
+                  args: ["--manifest", "/app/data/benchmark_v1/dataset_manifest.json"]
+                  envFrom:
+                    - secretRef:
+                        name: monitoring-secret
+                  volumeMounts:
+                    - name: data
+                      mountPath: /app/data
+                      readOnly: true
+                    - name: tools
+                      mountPath: /app/tools
+                      readOnly: true
+                    - name: o-drive
+                      mountPath: /mnt/O
+                      readOnly: true
+            volumes:
+              - name: data
+                hostPath:
+                  path: /mnt/data
+              - name: tools
+                hostPath:
+                  path: /mnt/tools
+              - name: o-drive
+                hostPath:
+                  path: /mnt/o-drive
+            restartPolicy: Never

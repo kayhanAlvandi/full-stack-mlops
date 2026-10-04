@@ -13,6 +13,7 @@
 services:
   drift-report:
     image: ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/monitoring:latest
+    pull_policy: always
     container_name: drift_report
     env_file: .env.monitoring
     volumes:
@@ -23,6 +24,7 @@ services:
 
   quality-report:
     image: ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/monitoring:latest
+    pull_policy: always
     container_name: quality_report
     env_file: .env.monitoring
     volumes:
@@ -33,6 +35,7 @@ services:
 
   label-backfill:
     image: ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/monitoring:latest
+    pull_policy: always
     container_name: label_backfill
     env_file: .env.monitoring
     volumes:
@@ -46,6 +49,7 @@ services:
   # filenames, reads shapes off disk and resolves labels from MongoDB.
   register-benchmark:
     image: ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/monitoring:latest
+    pull_policy: always
     container_name: register_benchmark
     env_file: .env.monitoring
     volumes:

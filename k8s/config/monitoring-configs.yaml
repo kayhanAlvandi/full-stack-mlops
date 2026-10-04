@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: monitoring-config
+  namespace: monitoring
+data:
+    # Base URL of the running API, used to read the served model's run_id from /model
+    MONITORING_BASE_URL: "http://api-service.api:8000"
+
+  

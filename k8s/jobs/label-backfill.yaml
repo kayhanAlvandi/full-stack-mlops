@@ -1,0 +1,28 @@
+# Job
+apiVersion: batch/v1
+kind: Job
+metadata:
+    name: label-backfill
+    namespace: monitoring
+spec:
+    backoffLimit: 2
+    ttlSecondsAfterFinished: 300   # Job + pod deleted 5min after completion
+    activeDeadlineSeconds: 3600
+    template:
+        spec:
+            containers:
+                - name: label-backfill
+                  image: ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/monitoring:latest
+                  command: ["python","-m" ,"monitoring.backfill_labels"]
+                  envFrom:
+                    - secretRef:
+                        name: monitoring-secret
+                  volumeMounts:
+                    - name: tools
+                      mountPath: /app/tools
+                      readOnly: true
+            volumes:
+              - name: tools
+                hostPath:
+                  path: /mnt/tools
+            restartPolicy: Never

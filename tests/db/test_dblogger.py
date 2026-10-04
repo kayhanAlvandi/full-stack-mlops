@@ -65,9 +65,9 @@ def db_logger():
     logger.connect()
     yield logger
     # Truncate between tests for isolation, then close
-    logger.connection.execute("TRUNCATE image_metadata CASCADE")
-    logger.connection.commit()
-    logger.connection.close()
+    with logger.pool.connection() as conn:
+        conn.execute("TRUNCATE image_metadata CASCADE")
+    logger.pool.close()
 
 
 # Filenames follow the pattern: {plate}_{well}_T{time}F{field}L{layer}A{action}Z{z}C{channel}.jxl
@@ -142,7 +142,7 @@ class TestLogImageMetadata:
         metadata_updated = _make_upload_metadata([CHANNEL_FILENAMES[0]], root_path=new_root)
         db_logger.log_image_metadata(metadata_updated)
 
-        with db_logger.connection.cursor() as cur:
+        with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT root_path FROM image_metadata WHERE file_name = %s",
                 (CHANNEL_FILENAMES[0],),
@@ -155,7 +155,7 @@ class TestLogImageMetadata:
         metadata = _make_upload_metadata(CHANNEL_FILENAMES)
         ids = db_logger.log_image_metadata(metadata)
 
-        with db_logger.connection.cursor() as cur:
+        with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT file_name, channel FROM image_metadata WHERE id = ANY(%s) ORDER BY channel",
                 (ids,),
@@ -217,7 +217,7 @@ class TestLogImageMetadata:
         metadata = _make_upload_metadata([CHANNEL_FILENAMES[0]])
         ids = db_logger.log_image_metadata(metadata)
 
-        with db_logger.connection.cursor() as cur:
+        with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT plate, well, field, channel, root_path, shape_x, shape_y FROM image_metadata WHERE id = %s",
                 (ids[0],),
@@ -303,7 +303,7 @@ class TestLogTileStack:
         tile_stack_metadata = clean_tiles_metadata(tiles, img_ids)
         tile_stack_ids = db_logger.log_tile_stack(tile_stack_metadata)
 
-        with db_logger.connection.cursor() as cur:
+        with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT row_ind, col_ind, x_left, y_top, crop_size FROM tile_stack WHERE id = %s",
                 (tile_stack_ids[0],),
@@ -338,7 +338,7 @@ class TestLogTileStackMember:
         assert member_ids is not None
         assert len(member_ids) == len(members)
 
-        with db_logger.connection.cursor() as cur:
+        with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM tile_stack_member")
             count = cur.fetchone()[0]
 
@@ -357,7 +357,7 @@ class TestLogTileStackMember:
         ]
         db_logger.log_tile_stack_member(members)
 
-        with db_logger.connection.cursor() as cur:
+        with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT image_id, channel_index FROM tile_stack_member "
                 "WHERE tile_stack_id = %s ORDER BY channel_index",
@@ -379,7 +379,7 @@ class TestLogTileStackMember:
         db_logger.log_tile_stack_member(members)
         db_logger.log_tile_stack_member(members)  # duplicate — must not raise
 
-        with db_logger.connection.cursor() as cur:
+        with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT COUNT(*) FROM tile_stack_member WHERE tile_stack_id = %s AND image_id = %s",
                 (tile_stack_ids[0], img_ids[0]),
@@ -410,7 +410,7 @@ class TestLogImagePrediction:
         pred = _make_image_prediction_tuple()
         pred_id = db_logger.log_image_prediction(pred)
 
-        with db_logger.connection.cursor() as cur:
+        with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT plate, well, field, run_id, p_label, t_label, "
                 "total_tiles, vote_fraction, avg_confidence, created_at "
@@ -435,7 +435,7 @@ class TestLogImagePrediction:
         pred = _make_image_prediction_tuple(t_label="negative")
         pred_id = db_logger.log_image_prediction(pred)
 
-        with db_logger.connection.cursor() as cur:
+        with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute("SELECT t_label FROM image_prediction WHERE id = %s", (pred_id,))
             row = cur.fetchone()
         assert row[0] == "negative"
@@ -470,7 +470,7 @@ class TestLogTilePrediction:
         ]
         db_logger.log_tile_prediction(tile_preds)
 
-        with db_logger.connection.cursor() as cur:
+        with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT COUNT(*) FROM tile_prediction WHERE image_pred_id = %s",
                 (img_pred_id,),
@@ -485,7 +485,7 @@ class TestLogTilePrediction:
         tile_preds = [(img_pred_id, tile_stack_ids[0], RUN_ID, "negative", None, 0.6, False, None)]
         db_logger.log_tile_prediction(tile_preds)
 
-        with db_logger.connection.cursor() as cur:
+        with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT image_pred_id, tile_stack_id, run_id, p_label, t_label, confidence "
                 "FROM tile_prediction WHERE image_pred_id = %s",
@@ -506,7 +506,7 @@ class TestLogTilePrediction:
         tile_preds = [(img_pred_id, tile_stack_ids[0], RUN_ID, "positive", None, 0.9, False, None)]
         db_logger.log_tile_prediction(tile_preds)
 
-        with db_logger.connection.cursor() as cur:
+        with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute(
                 "SELECT created_at FROM tile_prediction WHERE image_pred_id = %s",
                 (img_pred_id,),

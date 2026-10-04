@@ -74,11 +74,11 @@ def db_logger():
     # reaches most FK dependents, but benchmark_dataset has no FK to
     # image_metadata (only benchmark_dataset_member does), so it must be
     # truncated explicitly to prevent rows accumulating across tests.
-    logger.connection.execute(
-        "TRUNCATE image_metadata, benchmark_dataset, drift_report, quality_report CASCADE"
-    )
-    logger.connection.commit()
-    logger.connection.close()
+    with logger.pool.connection() as conn:
+        conn.execute(
+            "TRUNCATE image_metadata, benchmark_dataset, drift_report, quality_report CASCADE"
+        )
+    logger.pool.close()
 
 
 # ─────────────────────────────────────────────────────────────────────────────

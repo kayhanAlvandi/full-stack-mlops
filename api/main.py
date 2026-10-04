@@ -20,6 +20,8 @@ from api.config import Settings
 from api.predictor import TilePredictor
 from database.dblogger import DBLogger
 from utils.filename_parser import extract_info_from_filename
+import asyncio
+from starlette.concurrency import run_in_threadpool
 
 # Add project root to path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -30,10 +32,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 predictor: TilePredictor | None = None
 db_logger: DBLogger | None = None
 settings = Settings()
-
-class InferenceMode(str, Enum):
-    production = "production"
-    test = "test"
+inference_sem = asyncio.Semaphore(2)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -70,7 +69,8 @@ async def lifespan(app: FastAPI):
             crop_size=settings.crop_size,
             stride=settings.effective_stride,
             device=settings.device,
-            db_logger=db_logger
+            db_logger=db_logger,
+            artifact_root=settings.artifact_root
         )
         print(f"Model loaded. Source: {predictor.model_info['source']}")
         print(f"  Classes: {predictor.class_names}")
@@ -161,25 +161,12 @@ async def predict(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     
-    # Optionally override tiling params for this request
-    original_crop = predictor.crop_size
-    original_stride = predictor.stride
-    
-    if crop_size is not None:
-        predictor.crop_size = crop_size
-        if stride is None:
-            predictor.stride = crop_size
-    if stride is not None:
-        predictor.stride = stride
     
     try:
-        result = predictor.predict(image_channels, image_metadata)
+        async with inference_sem:
+            result = await run_in_threadpool(predictor.predict, image_channels, image_metadata, crop_size, stride)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    finally:
-        # Restore original settings
-        predictor.crop_size = original_crop
-        predictor.stride = original_stride
     
     return JSONResponse(content=result)
 

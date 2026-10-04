@@ -68,6 +68,10 @@ coverage.xml
 .env.training
 .env.monitoring
 docker/.env
+
+# K8s secret manifests with real values (commit only the *.example.yaml templates)
+k8s/config/*secret*.yaml
+!k8s/config/*secret*.example.yaml
 .venv
 env/
 venv/

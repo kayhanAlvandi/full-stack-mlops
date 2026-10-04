@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+  namespace: api          # api-image workloads live here (compute-references job + future API Deployment)
+data:
+  API_TRACKING_URI: "http://mlflow.api.svc.cluster.local:5000"
+  API_EXPERIMENT_NAME: "image_classifier"
+  # Served model (pick one: model_name OR run_name)
+  API_MODEL_NAME: "TransferLearningClassifier/29"
+  # API_RUN_NAME: "Vits_finetune_cosine_warmup_..."
+  # kind has no GPU -- use "cpu" for local compute-references validation;
+  # "cuda" only on a real GPU node (cloud phase).
+  API_DEVICE: "cpu"
+  # Mounted MLflow artifact store (the mlruns dir) -- pods read model/config
+  # artifacts straight off disk instead of downloading through the tracking
+  # server. Requires the mlruns extraMount in kind-cluster.yaml; unset it
+  # (or leave the dir missing) to fall back to HTTP downloads.
+  API_ARTIFACT_ROOT: "/mnt/mlruns"

@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: simulate-live
+  namespace: api
+spec:
+  restartPolicy: Never
+  containers:
+    - name: simulate-live
+      image: ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/api:latest
+      imagePullPolicy: IfNotPresent
+      command: ["sleep", "infinity"]
+      volumeMounts:
+        - name: o-drive
+          mountPath: /mnt/O
+          readOnly: true
+        - name: repo-data
+          mountPath: /mnt/data
+          readOnly: true
+  volumes:
+    - name: o-drive
+      hostPath:
+        path: /mnt/o-drive
+        type: Directory
+    - name: repo-data
+      hostPath:
+        path: /mnt/data     # <repo>/data, mounted into the kind node
+        type: Directory
