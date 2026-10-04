@@ -12,7 +12,7 @@
 # /model endpoint for run_id resolution; api is attached to both).
 services:
   drift-report:
-    image: ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/monitoring:latest
+    image: ghcr.io/kayhanalvandi/full-stack-mlops/monitoring:latest
     pull_policy: always
     container_name: drift_report
     env_file: .env.monitoring
@@ -23,7 +23,7 @@ services:
       - pg_network
 
   quality-report:
-    image: ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/monitoring:latest
+    image: ghcr.io/kayhanalvandi/full-stack-mlops/monitoring:latest
     pull_policy: always
     container_name: quality_report
     env_file: .env.monitoring
@@ -34,7 +34,7 @@ services:
       - pg_network
 
   label-backfill:
-    image: ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/monitoring:latest
+    image: ghcr.io/kayhanalvandi/full-stack-mlops/monitoring:latest
     pull_policy: always
     container_name: label_backfill
     env_file: .env.monitoring
@@ -48,7 +48,7 @@ services:
   # needed. The image/tools mounts are for the fallback glob mode, which parses
   # filenames, reads shapes off disk and resolves labels from MongoDB.
   register-benchmark:
-    image: ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/monitoring:latest
+    image: ghcr.io/kayhanalvandi/full-stack-mlops/monitoring:latest
     pull_policy: always
     container_name: register_benchmark
     env_file: .env.monitoring

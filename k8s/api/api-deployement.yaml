@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: api
-        image: ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/api:latest
+        image: ghcr.io/kayhanalvandi/full-stack-mlops/api:latest
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8000

@@ -1,6 +1,6 @@
 services:
   mlflow:
-    image: ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/mlflow:latest
+    image: ghcr.io/kayhanalvandi/full-stack-mlops/mlflow:latest
     pull_policy: always
     container_name: mlflow_server
     command: >

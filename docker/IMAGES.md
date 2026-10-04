@@ -1,7 +1,7 @@
 # Images & CD
 
 Where each image is built, published, and pulled from. Registry:
-`ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/<name>` (GHCR names are
+`ghcr.io/kayhanalvandi/full-stack-mlops/<name>` (GHCR names are
 lowercase; `docker/metadata-action` lowercases the owner automatically).
 
 ## Images
@@ -39,7 +39,7 @@ workflows.
 ## Pulling
 
 ```bash
-docker pull ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/api:latest
+docker pull ghcr.io/kayhanalvandi/full-stack-mlops/api:latest
 # private packages: authenticate first
 echo $GHCR_TOKEN | docker login ghcr.io -u <username> --password-stdin
 ```

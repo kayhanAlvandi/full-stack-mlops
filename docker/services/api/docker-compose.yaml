@@ -1,6 +1,6 @@
 services:
   api:
-    image: ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/api:latest
+    image: ghcr.io/kayhanalvandi/full-stack-mlops/api:latest
     pull_policy: always
     container_name: image_classifier_api
     env_file: .env.api

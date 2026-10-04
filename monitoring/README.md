@@ -46,7 +46,7 @@ as the benchmark set grows.
 
 ```bash
 python scripts/build_dataset.py dataset_spec=benchmark name=benchmark_v1
-make register-benchmark-run  # defaults to data/benchmark_v1/dataset_manifest.json
+make register-benchmark-run MANIFEST=data/benchmark_v1/dataset_manifest.json
 ```
 
 ### 2. `compute_predictions_references.py` -- per served run
@@ -148,6 +148,16 @@ loaded from `.env`):
 glob mode additionally need model-serving settings (`API_MODEL_NAME` /
 `API_RUN_NAME` / `API_DB_URI` / ...) via `api/config.py`'s `Settings`, since
 they instantiate `TilePredictor` directly rather than going through the API.
+
+## Running on Kubernetes
+
+The `make` targets above run each job once via `docker compose` (good for local
+iteration). The same jobs also ship as `batch/v1` Job manifests under `k8s/jobs/`
+(`register-benchmark`, `compute-references`, `label-backfill`, `drift-report`,
+`quality-report`), run against a local `kind` cluster with Postgres/MLflow/Mongo
+kept external. See `k8s/README.md` for the cluster setup and the per-job
+`kubectl apply -f jobs/<name>.yaml` workflow. Scheduling (K8s CronJob vs. an
+Airflow DAG) is deferred — see `docs/plans/airflow-terraform-overview.md`.
 
 ## See also
 

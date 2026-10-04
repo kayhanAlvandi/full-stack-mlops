@@ -131,3 +131,6 @@ dataset_manifest.json
 
 ## ignore agents rules
 AGENTS.md
+
+## ignore commit message
+commit_message.*

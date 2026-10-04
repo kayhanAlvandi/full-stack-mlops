@@ -12,7 +12,7 @@ spec:
         spec:
             containers:
                 - name: register-benchmark
-                  image: ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/monitoring:latest
+                  image: ghcr.io/kayhanalvandi/full-stack-mlops/monitoring:latest
                   command: ["python","-m" ,"monitoring.register_benchmark"]
                   args: ["--manifest", "/app/data/benchmark_v1/dataset_manifest.json"]
                   envFrom:

@@ -11,7 +11,7 @@ spec:
         spec:
             containers:
                 - name: compute-references
-                  image: ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/api:latest
+                  image: ghcr.io/kayhanalvandi/full-stack-mlops/api:latest
                   # IfNotPresent instead of the :latest-tag default (Always) --
                   # trust whatever's already loaded on the node (e.g. via
                   # `kind load docker-image`) instead of re-pulling from GHCR

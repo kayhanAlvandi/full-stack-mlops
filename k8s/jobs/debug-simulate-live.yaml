@@ -7,7 +7,7 @@ spec:
   restartPolicy: Never
   containers:
     - name: simulate-live
-      image: ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/api:latest
+      image: ghcr.io/kayhanalvandi/full-stack-mlops/api:latest
       imagePullPolicy: IfNotPresent
       command: ["sleep", "infinity"]
       volumeMounts:

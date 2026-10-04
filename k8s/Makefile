@@ -28,7 +28,7 @@ CLUSTER_NAME := image-classifier
 # Must match the image: in k8s/api/api-deployement.yaml -- bootstrap-dev
 # builds and loads exactly this tag so the Deployment manifest never needs
 # to change between "local dev" and "the real pushed image".
-API_IMAGE := ghcr.io/kayhanalvandi/pytorch-lightning-mlops-template/api:latest
+API_IMAGE := ghcr.io/kayhanalvandi/full-stack-mlops/api:latest
 
 kind-up:
 	python -c "import os,string,sys; sys.stdout.write(string.Template(open('kind-cluster.yaml').read()).substitute(os.environ))" | kind create cluster --name $(CLUSTER_NAME) --config -
