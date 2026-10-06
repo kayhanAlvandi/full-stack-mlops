@@ -3,8 +3,7 @@
 > **A production-grade MLOps platform, not just a model.** Full lifecycle in one repo — PyTorch
 > Lightning training, MLflow registry, a FastAPI serving layer with autoscaling and zero-downtime
 > rollout, Postgres-backed prediction logging, and automated drift/quality monitoring, run on
-> Kubernetes today with Terraform/cloud and Airflow orchestration on the roadmap. Ships with a
-> working multi-channel microscopy classifier as the reference implementation.
+> Kubernetes. Ships with a working multi-channel microscopy classifier as the reference implementation.
 
 [![Tests-Training](https://github.com/kayhanAlvandi/full-stack-mlops/actions/workflows/ci_training.yml/badge.svg)](https://github.com/kayhanAlvandi/full-stack-mlops/actions/workflows/ci_training.yml)
 [![Tests-Serving](https://github.com/kayhanAlvandi/full-stack-mlops/actions/workflows/ci_serving.yml/badge.svg)](https://github.com/kayhanAlvandi/full-stack-mlops/actions/workflows/ci_serving.yml)
@@ -23,7 +22,10 @@ The whole lifecycle shares one backbone — **MLflow** (models + versions) and *
 batch monitoring jobs run on Kubernetes; the stateful services stay external (host today, managed
 cloud later via a one-line `ExternalName` swap).
 
-![Architecture](docs/architecture.png)
+![Architecture](docs/diagram/architecture.png)
+
+> **Edges:** solid blue = data flow (the `train → register → serve → log → monitor` spine) ·
+> dashed = control / autoscaling · dotted grey = image provenance (GHCR → workloads).
 
 ## Highlights
 
