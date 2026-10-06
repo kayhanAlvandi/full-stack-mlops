@@ -143,3 +143,33 @@ def insert_benchmark_sample(db_logger, well: str = WELL, field: int = 1,
     ]
     db_logger.log_benchmark_members(members)
     return benchmark_id, img_ids
+
+
+def insert_image_and_tile_prediction(db_logger, well: str = WELL, field: int = 1,
+                                      run_id: str = RUN_ID, p_label: str = "positive",
+                                      t_label: str | None = None, confidence: float = 0.9,
+                                      is_reference: bool = False,
+                                      benchmark_id: int | None = None,
+                                      stack_hash: str | None = None) -> int:
+    """Insert one full image_metadata -> tile_stack -> tile_stack_member ->
+    image_prediction -> tile_prediction chain, returning the image_prediction id.
+
+    Used by orchestration tests (run_drift_report, run_quality_report) that
+    need both image-level AND tile-level rows to exist -- fetch_reference_tile_level/
+    fetch_current_tile_level join through tile_stack/tile_stack_member, so an
+    image_prediction row alone (as make_image_prediction_tuple/log_image_prediction
+    produces) is not enough to make those queries return anything.
+    """
+    img_ids = insert_images(db_logger, well=well, field=field)
+    stack_hash = stack_hash or f"hash-{well}-{field}-{run_id}-{is_reference}-{p_label}"
+    tile_stack_id = db_logger.log_tile_stack([(stack_hash, 0, 0, 0, 0, 32)])[0]
+    members = [(tile_stack_id, img_id, idx) for idx, img_id in enumerate(img_ids)]
+    db_logger.log_tile_stack_member(members)
+    img_pred_id = db_logger.log_image_prediction(make_image_prediction_tuple(
+        well=well, field=field, run_id=run_id, p_label=p_label, t_label=t_label,
+        avg_confidence=confidence, is_reference=is_reference, benchmark_id=benchmark_id,
+    ))
+    db_logger.log_tile_prediction([
+        (img_pred_id, tile_stack_id, run_id, p_label, t_label, confidence, is_reference, benchmark_id)
+    ])
+    return img_pred_id

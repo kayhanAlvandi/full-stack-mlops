@@ -1,9 +1,10 @@
 """Tests for monitoring/compute_predictions_references.py helper functions.
 
-These run in the API/inference environment (requirements/api_req.txt) because
-the module imports api.config and api.predictor at module level. The helper
-functions tested here (_group_members) are pure data-transformation functions
-that don't load models or images.
+The module only imports api.predictor.TilePredictor lazily (inside main(), see
+the module docstring/comment there), so this runs with plain
+requirements/monitoring_req.txt like the rest of tests/monitoring/unit -- no
+torch/mlflow needed. The helper functions tested here (_group_members) are
+pure data-transformation functions that don't load models or images.
 """
 from __future__ import annotations
 

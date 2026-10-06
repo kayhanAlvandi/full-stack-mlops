@@ -17,6 +17,12 @@ class DBLogger:
 
     def connect(self):
         self.pool = ConnectionPool(self.db_uri, open=True)
+        # open=True only schedules connection attempts on background workers;
+        # wait() blocks until one succeeds and re-raises the real error if
+        # every attempt fails -- without it, a bad URI surfaces 30s later as
+        # PoolTimeout on the first query, so try/except around connect()
+        # would never catch a failed connection.
+        self.pool.wait()
 
     def close(self):
         self.pool.close()

@@ -6,6 +6,8 @@ on:
     paths:
       - 'api/**'
       - 'tests/api/**'
+      - 'database/init/**'
+      - 'database/dblogger.py'
       - 'docker/services/api/Dockerfile'
       - '.github/workflows/ci_serving.yml'
       - '.github/actions/setup-env/'
@@ -16,8 +18,8 @@ on:
 
 
 jobs:
-  # Fast CPU suite: runs automatically on push and pull_request.
-  test-push-serving: 
+  # Fast CPU suite: no DB, no MLflow. Runs automatically on push and pull_request.
+  test-push-serving-unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,11 +33,53 @@ jobs:
         with:
           requirements_file: requirements/api_req.txt
       - name: Run tests
-        run: pytest tests/api -q
-  
+        run: pytest tests/api/unit -q
+
+  # DB integration tests for TilePredictor.predict()'s logging calls against
+  # a real PostgreSQL schema (same pattern as ci_monitoring.yml's monitoring-db).
+  test-push-serving-db:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        db_user: [admin]
+        db_pass: [admin123456]
+        db_host: [localhost]
+        db_port: [5432]
+        db_name: [test]
+    env:
+      DB_USER: ${{ matrix.db_user }}
+      DB_PASS: ${{ matrix.db_pass }}
+      DB_HOST: ${{ matrix.db_host }}
+      DB_PORT: ${{ matrix.db_port }}
+      DB_NAME: ${{ matrix.db_name }}
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ${{ matrix.db_user }}
+          POSTGRES_PASSWORD: ${{ matrix.db_pass }}
+          POSTGRES_DB: ${{ matrix.db_name }}
+        ports:
+          - ${{ matrix.db_port }}:5432
+        options: >-
+          --health-cmd "pg_isready -U ${{ matrix.db_user }} -d ${{ matrix.db_name }}"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: ./.github/actions/setup-env
+        with:
+          requirements_file: requirements/api_req.txt
+      - name: Run tests
+        env:
+          DB_TEST_URI: "postgresql://${{ env.DB_USER }}:${{ env.DB_PASS }}@${{ env.DB_HOST }}:${{ env.DB_PORT }}/${{ env.DB_NAME }}"
+        run: pytest tests/api/db -v
+
   serving-build-push:
     runs-on: ubuntu-latest
-    needs: test-push-serving
+    needs: [test-push-serving-unit, test-push-serving-db]
     if: github.event_name != 'pull_request'
     steps:
       - uses: actions/checkout@v4

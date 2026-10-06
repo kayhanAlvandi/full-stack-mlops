@@ -104,26 +104,25 @@ class TilePredictor:
     
     def __init__(
         self,
-        tracking_uri: str = "sqlite:///mlflow.db",
-        experiment_name: str = "image_classifier",
-        model_name: str = "",
-        run_name: str = "",
+        model: torch.nn.Module,
+        model_info: dict,
         crop_size: int = 224,
         stride: int | None = None,
         device: str = "cpu",
         db_logger: DBLogger | None = None,
-        artifact_root: str | None = None
     ):
+        """Build a predictor around an already-loaded model.
+
+        This constructor does no I/O (no MLflow calls): it only wires up
+        device placement and the config derived from ``model_info``. Use
+        ``TilePredictor.from_mlflow(...)`` to load a model from MLflow and
+        build a predictor in one step; construct directly (e.g. with a stub
+        model) to exercise the tiling/inference/db-logging pipeline in tests
+        without any MLflow/network dependency.
+        """
         self.device = torch.device(device)
-        self.tracking_uri = tracking_uri
-        self.experiment_name = experiment_name
-        self.artifact_root = Path(artifact_root) if artifact_root else None
-        
-        # Load model and extract config from MLflow artifacts
-        self.model, self.model_info = self._load_model(
-            model_name=model_name,
-            run_name=run_name,
-        )
+        self.model = model
+        self.model_info = model_info
         # torchmetrics.Metric submodules (e.g. an accuracy metric logged as
         # part of the LightningModule) keep the device they were on at save
         # time in a private `_device` attribute -- unlike real tensors,
@@ -153,7 +152,47 @@ class TilePredictor:
         # Preprocessing: normalize per-channel (zero mean, unit variance)
         self.normalize = Normalize()
         self.db_logger = db_logger
-    
+
+    @classmethod
+    def from_mlflow(
+        cls,
+        tracking_uri: str = "sqlite:///mlflow.db",
+        experiment_name: str = "image_classifier",
+        model_name: str = "",
+        run_name: str = "",
+        crop_size: int = 224,
+        stride: int | None = None,
+        device: str = "cpu",
+        db_logger: DBLogger | None = None,
+        artifact_root: str | None = None,
+    ) -> TilePredictor:
+        """Load a model from MLflow (registry, run name, or checkpoint) and
+        build a TilePredictor around it.
+
+        A bare, uninitialized instance (via ``__new__``) is used purely to
+        carry the loading parameters into the existing ``_load_model`` /
+        ``_resolve_local_artifacts`` / ``_load_run_config`` helpers, which
+        read them off ``self``. The returned predictor is built normally
+        through ``cls(...)``, so all real initialization still happens in
+        ``__init__``.
+        """
+        loader = cls.__new__(cls)
+        loader.device = torch.device(device)
+        loader.tracking_uri = tracking_uri
+        loader.experiment_name = experiment_name
+        loader.artifact_root = Path(artifact_root) if artifact_root else None
+
+        model, model_info = loader._load_model(model_name=model_name, run_name=run_name)
+
+        return cls(
+            model,
+            model_info,
+            crop_size=crop_size,
+            stride=stride,
+            device=device,
+            db_logger=db_logger,
+        )
+
     def _load_model(self, model_name: str, run_name: str):
         """Load model with priority: model_name > run_name.
 

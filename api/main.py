@@ -60,7 +60,7 @@ async def lifespan(app: FastAPI):
             print("Set API_DB_URI to enable database logging.")
             db_logger = None
 
-        predictor = TilePredictor(
+        predictor = TilePredictor.from_mlflow(
             tracking_uri=settings.tracking_uri,
             experiment_name=settings.experiment_name,
             model_name=settings.model_name,

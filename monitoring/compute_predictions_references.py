@@ -24,15 +24,24 @@ row for this run_id (DBLogger.get_reference_samples), and benchmark samples
 already scored for this run_id (DBLogger.get_benchmark_predictions), so an
 interrupted run only processes what's missing.
 """
+from __future__ import annotations
+
 import argparse
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from api.config import Settings
-from api.predictor import TilePredictor
 from database.dblogger import DBLogger
+
+if TYPE_CHECKING:
+    # TilePredictor (api.predictor) transitively imports torch/mlflow/timm;
+    # only main() actually instantiates one, everywhere else it's a type
+    # hint, so the heavy import is deferred there and this module stays
+    # importable with just requirements/monitoring_req.txt.
+    from api.predictor import TilePredictor
 
 
 def _load_single_image(file_path: Path) -> np.ndarray:
@@ -254,6 +263,11 @@ def compute_benchmark_reference(predictor: TilePredictor, db_logger: DBLogger, r
 
 
 def main():
+    # Deferred to here: api.predictor transitively imports torch/mlflow/timm,
+    # and main() is the only path that needs them -- keeping it function-local
+    # leaves the module importable with just requirements/monitoring_req.txt.
+    from api.predictor import TilePredictor
+
     parser = argparse.ArgumentParser(
         description="Compute reference predictions (validation and/or benchmark) for the served model."
     )
@@ -287,7 +301,7 @@ def main():
         return
 
     try:
-        predictor = TilePredictor(
+        predictor = TilePredictor.from_mlflow(
             tracking_uri=settings.tracking_uri,
             experiment_name=settings.experiment_name,
             model_name=settings.model_name,

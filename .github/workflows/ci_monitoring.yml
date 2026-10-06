@@ -12,8 +12,6 @@ on:
       - 'utils/labels.py'
       - 'docker/jobs/monitoring/Dockerfile'
       - 'requirements/monitoring_req.txt'
-      - 'requirements/db_req.txt'
-      - 'requirements/api_req.txt'
       - '.github/workflows/ci_monitoring.yml'
       - '.github/actions/setup-env/**'
   pull_request:
@@ -24,8 +22,9 @@ on:
 jobs:
   # ───────────────────────────────────────────────────────────────────────────
   # Lightweight monitoring unit tests (no DB, no torch, no MLflow).
-  # Covers config, register_benchmark (manifest mode), backfill_labels (mocked),
-  # run_drift_report helpers, run_quality_report helpers.
+  # Covers config, register_benchmark (manifest mode), run_drift_report helpers,
+  # run_quality_report helpers, compute_predictions_references helpers
+  # (api.predictor.TilePredictor is imported lazily there, only inside main()).
   # ───────────────────────────────────────────────────────────────────────────
   monitoring-unit:
     runs-on: ubuntu-latest
@@ -44,9 +43,12 @@ jobs:
         run: pytest tests/monitoring/unit -q
 
   # ───────────────────────────────────────────────────────────────────────────
-  # DB integration tests for monitoring (benchmark registration, view
-  # partitioning, label backfill, drift/quality DB methods).
-  # Uses requirements/db_req.txt (psycopg only) + a PostgreSQL 16 service.
+  # DB integration tests for monitoring: benchmark registration, view
+  # partitioning, drift/quality DB methods, and real-DB orchestration tests
+  # for each job script's main() (backfill_labels, register_benchmark,
+  # run_drift_report, run_quality_report). Uses requirements/monitoring_req.txt
+  # since these import the full job scripts (pandas/evidently/pymongo), not
+  # just DBLogger, + a PostgreSQL 16 service.
   # ───────────────────────────────────────────────────────────────────────────
   monitoring-db:
     runs-on: ubuntu-latest
@@ -82,34 +84,15 @@ jobs:
       - name: Set up Python
         uses: ./.github/actions/setup-env
         with:
-          requirements_file: requirements/db_req.txt
+          requirements_file: requirements/monitoring_req.txt
       - name: Run monitoring DB tests
         env:
           DB_TEST_URI: "postgresql://${{ env.DB_USER }}:${{ env.DB_PASS }}@${{ env.DB_HOST }}:${{ env.DB_PORT }}/${{ env.DB_NAME }}"
         run: pytest tests/monitoring/db -v
 
-  # ───────────────────────────────────────────────────────────────────────────
-  # Inference helper tests for compute_predictions_references.py.
-  # Uses requirements/api_req.txt because the module imports api.config and
-  # api.predictor (torch, mlflow, timm) at module level. Tests only cover pure
-  # helper functions (_group_members) that don't load models or images.
-  # ───────────────────────────────────────────────────────────────────────────
-  monitoring-inference:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: ./.github/actions/setup-env
-        with:
-          requirements_file: requirements/api_req.txt
-      - name: Run monitoring inference tests
-        run: pytest tests/monitoring/inference -q
-
-
-  
   monitoring-build-push:
     runs-on: ubuntu-latest
-    needs: [monitoring-unit, monitoring-db, monitoring-inference]
+    needs: [monitoring-unit, monitoring-db]
     if: github.event_name != 'pull_request'
     steps:
       - uses: actions/checkout@v4
