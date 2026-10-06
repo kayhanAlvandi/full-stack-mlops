@@ -6,22 +6,21 @@ Upload a multi-channel image (or multiple single-channel files) and get:
 
 Models are loaded from MLflow (registered model name, run name, or checkpoint).
 """
+import asyncio
 import io
 import sys
 from contextlib import asynccontextmanager
-from enum import Enum
 from pathlib import Path
 
 import numpy as np
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from api.config import Settings
 from api.predictor import TilePredictor
 from database.dblogger import DBLogger
 from utils.filename_parser import extract_info_from_filename
-import asyncio
-from starlette.concurrency import run_in_threadpool
 
 # Add project root to path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
