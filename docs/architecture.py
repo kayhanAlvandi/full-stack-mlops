@@ -19,13 +19,14 @@ is what the README embeds. Re-run after changing the architecture.
 """
 
 from diagrams import Cluster, Diagram, Edge
+from diagrams.generic.storage import Storage
 from diagrams.k8s.clusterconfig import HPA
-from diagrams.k8s.compute import Deployment, Job
+from diagrams.k8s.compute import Job
 from diagrams.k8s.network import Ingress
 from diagrams.onprem.ci import GithubActions
 from diagrams.onprem.client import Users
 from diagrams.onprem.container import Docker
-from diagrams.onprem.database import Mongodb, PostgreSQL
+from diagrams.onprem.database import PostgreSQL
 from diagrams.onprem.mlops import Mlflow
 from diagrams.programming.framework import Fastapi
 from diagrams.programming.language import Python
@@ -38,64 +39,71 @@ GRAPH_ATTR = {
 }
 
 with Diagram(
-    "Image Classifier - MLOps Platform",
+    "MLOps Platform",
     filename="docs/architecture",
     show=False,
-    direction="LR",
+    direction="TB",
     graph_attr=GRAPH_ATTR,
 ):
+    # Smaller, secondary nodes. Height stays a bit taller than width so the
+    # label has room to sit *below* the scaled-down icon instead of being
+    # drawn over it; labels on these must be short (narrow nodes clip wide
+    # text onto the icon).
+    small = {"width": "0.95", "height": "1.35", "fontsize": "11"}
+
     client = Users("Client / acquisition")
 
-    # Stateful services that live outside the cluster (host now, managed cloud later).
-    with Cluster("External stateful services"):
-        mlflow = Mlflow("MLflow\ntracking + registry")
-        postgres = PostgreSQL("Postgres\npredictions + monitoring")
-        mongo = Mongodb("MongoDB\nground-truth labels")
+    # Stateful services live outside the cluster (host now, managed cloud
+    # later). Kept as separate free-standing nodes -- not boxed together --
+    # so each sits next to whatever it talks to instead of tangling lines.
+    mlflow = Mlflow("MLflow (external)\ntracking + registry")
+    postgres = PostgreSQL("Postgres (external)\npredictions + monitoring")
 
-    # Build & publish images.
-    with Cluster("CI/CD (GitHub Actions -> GHCR)"):
-        ci = GithubActions("5 scoped workflows\nlint + test + build/push")
-        registry = Docker("GHCR images\napi / monitoring / mlflow")
+    # Monitoring writes its rendered reports to a mounted volume on the host.
+    # Short label: shrunk nodes clip multi-line text into the icon.
+    reports = Storage("reports", **small)
+
+    # Build & publish images. Keep the cluster title short and wrapped -- a
+    # long one-line title forces the whole box as wide as the text.
+    with Cluster("CI/CD -> GHCR\nlint · test · build/push"):
+        ci = GithubActions("GitHub Actions", width="1.8", height="2.2", fontsize="11")
+        # Wider/taller than `small` so the image list fits as a label under
+        # the icon (narrow nodes clip wide text onto the image).
+        registry = Docker(
+            "GHCR\napi / monitoring / mlflow",
+            width="1.8",
+            height="2.3",
+            fontsize="11",
+        )
         ci >> Edge(label="build & push") >> registry
 
     # The training side (human-in-the-loop, not auto-scheduled).
     with Cluster("Training (Lightning + Hydra)"):
         train = Python("train.py")
-        train >> Edge(label="params / metrics / model + dataset version") >> mlflow
+        train >> Edge(label="model + dataset version") >> mlflow
 
     # Everything that runs in-cluster.
     with Cluster("Kubernetes (kind)"):
-        ingress = Ingress("ingress-nginx\napi.localtest.me")
-
         with Cluster("api namespace"):
             api = Fastapi("FastAPI /predict\nTilePredictor")
-            hpa = HPA("HPA (CPU)")
-            hpa >> Edge(style="dashed", label="scale") >> api
+            ingress = Ingress("ingress", **small)
+            hpa = HPA("HPA", **small)
+            ingress >> Edge(style="dashed") >> api
+            hpa >> Edge(style="dashed", label="autoscale") >> api
 
-        with Cluster("monitoring namespace (batch jobs)"):
-            compute = Job("compute-references")
-            drift = Job("drift-report")
-            quality = Job("quality-report")
-            backfill = Job("label-backfill")
-            benchmark = Job("register-benchmark")
-
-        api_deploy = Deployment("rolling restart\non model change")
-        api_deploy >> Edge(style="dashed") >> api
+        with Cluster("monitoring namespace"):
+            monitor = Job("batch jobs\ndrift + quality reports")
 
     # Serving request path.
-    client >> Edge(label="upload image") >> ingress >> api
-    api >> Edge(label="load model by name/run") >> mlflow
+    client >> Edge(label="upload image") >> ingress
+    mlflow >> Edge(label="load model") >> api
     api >> Edge(label="log predictions") >> postgres
 
-    # Monitoring data flows.
-    compute >> Edge(label="score val + benchmark") >> postgres
-    compute >> Edge(style="dashed", label="load model") >> mlflow
-    benchmark >> Edge(label="register benchmark set") >> postgres
-    backfill << Edge(label="resolve labels") << mongo
-    backfill >> Edge(label="backfill t_label") >> postgres
-    postgres >> Edge(label="live vs reference (unsupervised)") >> drift
-    postgres >> Edge(label="benchmark vs labeled live (supervised)") >> quality
+    # Monitoring reads predictions / writes report rows, and renders reports to disk.
+    monitor >> Edge(label="read predictions / write reports", forward=True, reverse=True) >> postgres
+    monitor >> Edge(label="render") >> reports
 
-    # Images consumed by the in-cluster workloads.
+    # One image per workload built & pushed to GHCR (api / monitoring / mlflow).
     registry >> Edge(style="dotted", color="grey") >> api
-    registry >> Edge(style="dotted", color="grey") >> compute
+    registry >> Edge(style="dotted", color="grey") >> monitor
+    registry >> Edge(style="dotted", color="grey") >> mlflow
