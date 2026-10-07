@@ -29,20 +29,23 @@ cloud later via a one-line `ExternalName` swap).
 
 ## Highlights
 
-- **Full ML lifecycle in one system** — not just a model: training, model + dataset versioning,
+- **Full ML lifecycle in one system** — training, model registry, dataset versioning,
   serving, prediction storage, and post-deployment monitoring, wired together.
+- **Config-driven training** — PyTorch Lightning loop with Hydra-composed experiments (`datamodule`/`model`/`optimizer`/`loss`/ `trainer` groups, no code edits per run), a model zoo from `simplecnn` to `vit_base`, and dual TensorBoard + MLflow logging.
 - **Model & data versioning** — MLflow registry with resume-from-registered-model; every run logs a
   content-hashed dataset version + git commit for reproducibility.
 - **Production serving** — FastAPI loading models straight from MLflow, on Kubernetes with
-  **CPU-based HPA autoscaling**, **readiness-gated zero-downtime rollout**, and self-healing pods.
+  **HPA autoscaling**, **readiness-gated zero-downtime rollout**, and self-healing pods.
 - **Monitoring that distinguishes two questions** — unsupervised **drift** (does input/output still
   look like what the model was validated on?) vs. supervised **quality** (is it still accurate?)
   against a *frozen, model-independent benchmark* so scores are comparable across model versions.
-- **Data engineering discipline** — normalized Postgres schema with a single live/reference/benchmark
-  split via flags + SQL views; idempotent, resumable, shardable batch jobs.
+- **Data engineering discipline** — normalized Postgres: shared content-hashed tile stacks, one
+  live/reference/benchmark split via flags + SQL views, async label backfill, and drift metrics
+  stored as queryable rows; all writes idempotent and resumable.
 - **CI/CD & testing** — 5 scoped GitHub Actions workflows (lint → layered pytest → build/push images
-  to GHCR); unit / integration / API / DB test layers with GPU-aware markers.
+  to GHCR); Training / API / DB / Monitoring test layers with GPU-aware markers.
 
+<!---
 ## Visual tour
 
 > _Screenshots (add under `docs/images/`):_
@@ -50,6 +53,8 @@ cloud later via a one-line `ExternalName` swap).
 > | MLflow runs & registry | Evidently drift report | Kubernetes (HPA + pods) |
 > |---|---|---|
 > | _`docs/images/mlflow.png`_ | _`docs/images/drift.png`_ | _`docs/images/k8s.png`_ |
+>
+<!--- -->
 
 ## Features
 
@@ -69,7 +74,7 @@ cloud later via a one-line `ExternalName` swap).
 
 **Monitoring**
 
-- **Ephemeral monitoring jobs** (`monitoring/`): benchmark registration, reference scoring, label backfill from MongoDB, and Evidently **drift** (unsupervised) + **quality** (supervised, vs. a frozen benchmark) reports — all reading/writing the same Postgres tables.
+- **Ephemeral monitoring jobs** (`monitoring/`): benchmark registration, reference scoring, label backfill from later-added labels, and Evidently **drift** (unsupervised) + **quality** (supervised, vs. a frozen benchmark) reports — all reading/writing the same Postgres tables.
 - One schema for live/reference/benchmark traffic, partitioned by flags + SQL views (`database/init/`).
 
 **Platform & delivery**
@@ -77,7 +82,9 @@ cloud later via a one-line `ExternalName` swap).
 - **Docker Compose** stacks for MLflow, GPU training, the API, and the jobs, orchestrated via `docker/makefile`.
 - **GHCR-published images** (`api`, `monitoring`, `mlflow`, `training`) built by CI and pulled by the k8s manifests (`docker/IMAGES.md`).
 - **Local `kind` cluster** (`k8s/`) — namespaces, `ExternalName` services to host Postgres/MLflow, ConfigMaps/Secrets, batch Job manifests, and traffic-simulation targets.
-- **CI/CD** — 5 scoped GitHub Actions workflows: ruff lint → layered pytest (unit/integration/API/DB, incl. a real Postgres service container) → build & push tagged images to GHCR.
+- **CI/CD** — path-scoped Actions workflows: ruff → layered pytest (unit + real-Postgres
+  service containers for DB/API/monitoring) → GHCR push gated on green; training images are
+  manual-dispatch only.
 - **Layered test suite** — `tests/training` (unit + integration), `tests/api`, `tests/db`, `tests/monitoring` with pytest markers (`slow`, `gpu`) and a `Makefile` for local runs.
 
 ## Project Structure
@@ -379,9 +386,6 @@ by `(plate, well)`). Reusing those layers for a different domain means adapting 
   a deterministic dummy fallback (`resolve_labels_dummy`) for tests/offline use.
 - `database/init/01_prediction.sql` — the `image_metadata` columns (`plate`, `well`, `field`,
   `channel`, ...).
-
-If your domain has no natural plate/well/field/channel structure, the cleanest path is to use this
-template for training only, and write a lighter serving/DB layer once you need one.
 
 ## Reference Implementation: Multi-Channel Microscopy
 
