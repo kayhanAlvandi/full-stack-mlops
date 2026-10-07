@@ -152,9 +152,76 @@ status/result.
 hold a connection that long anyway), or traffic becomes batchy/bulk-submission
 rather than interactive.
 
-## Monitoring smoke test
+## README polish
 
-Completed end-to-end against real data, real Postgres, real MLflow, and real
-MongoDB (label backfill, drift report, quality report all ran successfully).
-See `monitoring/README.md` for how the pipeline works and how to run each
-step.
+Feedback from a recruiter's-eye review: the README convinces engineers who read
+carefully, but lacks *evidence and accessibility* for someone who skims for
+~30 seconds. Items A, B, D are **top priority**.
+
+### A. Visual proof — screenshots + demo video (P1)
+
+Uncomment and fill in the "Visual tour" section (README ~line 48) with real
+screenshots under `docs/images/`: MLflow runs & registry, an Evidently drift
+report, `kubectl get pods`/`hpa`.
+
+Record a **30–60 second demo GIF/video** showing the full lifecycle:
+
+```
+1. train model
+       ↓
+2. MLflow shows run
+       ↓
+3. model registered
+       ↓
+4. Kubernetes deployment
+       ↓
+5. curl/API prediction
+       ↓
+6. PostgreSQL receives prediction
+       ↓
+7. simulate production traffic
+       ↓
+8. monitoring detects drift
+```
+
+### B. Demo path — `make demo` quickstart (P1)
+
+Today there is no "5 commands to a working prediction": setup requires
+creating networks, an external Postgres compose file, MongoDB labels, and
+machine-specific config — readers have to take the README's word for it.
+
+- [ ] Add a `make demo` (or `docker compose` demo stack) that spins up MLflow +
+      Postgres + API with **dummy labels/data** (`resolve_labels_dummy`, a small
+      synthetic dataset) so anyone can verify the pipeline end to end.
+- [ ] Use the demo path as the basis for the demo video in (A).
+
+### C. Density & representation (P2)
+
+README is ~400 lines; the Usage section is heavy. Consider:
+
+- A table of contents.
+- Moving the Postgres `docker-compose` YAML blob (README ~lines 189–215) into
+  the repo as an actual file the README links to.
+- Tightening the Features/Highlights overlap — fold unique bullets up into
+  Highlights and keep Features as the detailed inventory (or vice versa).
+
+### D. Minor polish (P1)
+
+- [ ] Rename `k8s/api/api-deployement.yaml` → `api-deployment.yaml` (typo).
+- [ ] `tests/diagnostics/` advertised as "old exploratory scripts" (README
+      lines ~137, ~342) undercuts the polish — either delete the directory or
+      stop mentioning it in the README.
+- [ ] Credentials in snippets (`admin:admin123456`, README ~line 360) — add a
+      one-line "dev-only credentials" note.
+- [ ] No license and no author/context line — add one sentence near the top
+      ("built by X as a portfolio project demonstrating production MLOps
+      patterns") so a recruiter knows the intent immediately.
+
+### E. `docs/plans/` as an asset (P2)
+
+Design docs (`airflow-terraform-overview.md`, `kubernetes-plan.md`,
+`mlops-orchestration.md`, `batch-predict.md`) are good interview fodder but
+invisible. Add one README line linking to them as "design decisions / roadmap".
+
+
+

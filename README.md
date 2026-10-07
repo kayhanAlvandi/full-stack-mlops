@@ -3,7 +3,8 @@
 > **A production-grade MLOps platform, not just a model.** Full lifecycle in one repo — PyTorch
 > Lightning training, MLflow registry, a FastAPI serving layer with autoscaling and zero-downtime
 > rollout, Postgres-backed prediction logging, and automated drift/quality monitoring, run on
-> Kubernetes. Ships with a working multi-channel microscopy classifier as the reference implementation.
+> Kubernetes. Ships with a working high-content screening (HCS) multi-channel image classifier
+> as the reference implementation.
 
 [![Tests-Training](https://github.com/kayhanAlvandi/full-stack-mlops/actions/workflows/ci_training.yml/badge.svg)](https://github.com/kayhanAlvandi/full-stack-mlops/actions/workflows/ci_training.yml)
 [![Tests-Serving](https://github.com/kayhanAlvandi/full-stack-mlops/actions/workflows/ci_serving.yml/badge.svg)](https://github.com/kayhanAlvandi/full-stack-mlops/actions/workflows/ci_serving.yml)
