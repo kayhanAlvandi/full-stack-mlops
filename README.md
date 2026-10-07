@@ -1,6 +1,6 @@
 # End-to-End MLOps: Train → Register → Serve → Monitor
 
-> **A Production-oriented end-to-end MLOps platform.** Full lifecycle in one repo — PyTorch
+> **A production-oriented end-to-end MLOps platform.** Full lifecycle in one repo — PyTorch
 > Lightning training, MLflow registry, a FastAPI serving layer with autoscaling and zero-downtime
 > rollout, Postgres-backed prediction logging, and automated drift/quality monitoring, run on
 > Kubernetes. Ships with a working multi-channel microscopy classifier as the reference implementation.
