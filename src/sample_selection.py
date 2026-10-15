@@ -10,7 +10,7 @@ The pipeline is always the same four steps, in this order:
 
     index   = scan_directory(root_dir)                    # the only disk scan
     wells   = wells_from_index(index, exclude=, include=)
-    labels  = resolve_labels_for_wells(wells, ...)         # utils/labels.py
+    labels  = label_provider.get_labels_for_wells(wells)  # utils/labels.py provider
     samples = build_samples(index, labels, channels, ...)
 
 Scanning once matters: the previous split (label provider globbed to discover
@@ -27,7 +27,6 @@ from __future__ import annotations
 import random
 from collections import defaultdict
 from dataclasses import asdict, dataclass
-from dataclasses import field as dataclass_field
 from pathlib import Path
 
 from utils.filename_parser import FILENAME_PATTERN
@@ -251,7 +250,14 @@ class DatasetSpec:
 
     root_dir: str
     channels: list[int]
-    use_mongodb: bool = True
+    # Hydra-style config for the label provider: {_target_: "utils.labels.
+    # MongoDBLabelsProvider"/"CSVLabelsProvider"/"DummyLabelsProvider", ...that
+    # class's own constructor params}, instantiated with hydra.utils.instantiate()
+    # -- same pattern src.datamodule.MultiChannelDataModule uses for training.
+    # None builds a genuinely unlabelled dataset (no 'label' key at all) -- real
+    # production data with no ground truth yet should never get a made-up
+    # label, the same way the API's /predict never invents one.
+    label_provider: dict | None = None
     exclude_wells: list[Well] | None = None
     include_wells: list[Well] | None = None
     max_wells_per_label: int | None = None
@@ -259,19 +265,6 @@ class DatasetSpec:
     seed: int = 42
     verbose: bool = False
     name: str = "dataset"
-    dummy_class_names: list[str] | None = dataclass_field(default=None)
-    # Opt-in only: assigns deterministic pseudo-random labels instead of real
-    # ones, for tests/offline runs. Default False means "use_mongodb: false"
-    # builds a genuinely unlabelled dataset (no 'label' key), not a fake one --
-    # real production data with no ground truth yet should never get a made-up
-    # label, the same way the API's /predict never invents one.
-    dummy_labels: bool = False
-
-    @property
-    def label_source(self) -> str:
-        if self.use_mongodb:
-            return "mongodb"
-        return "dummy" if self.dummy_labels else "none"
 
     def to_dict(self) -> dict:
         """Plain-dict form, used for the config hash in the dataset version."""
@@ -293,16 +286,13 @@ class DatasetSpec:
 
         dataset_cfg = cfg["dataset"]
         exclude = cfg.get("exclude_wells")
-        use_mongodb = cfg.get("use_mongodb", True)
         return cls(
             root_dir=dataset_cfg["root_dir"],
             channels=list(dataset_cfg["channels"]),
-            use_mongodb=use_mongodb,
-            # Training's datamodule always needs labels to train on, so it
-            # falls back to DummyLabelsProvider (not "no label") when
-            # use_mongodb is false -- match that here to reconstruct what
-            # training actually saw.
-            dummy_labels=not use_mongodb,
+            # Training's datamodule always needs labels to train on, so its
+            # label_provider is never None -- carried over here as-is to
+            # reconstruct what training actually saw.
+            label_provider=cfg.get("label_provider"),
             exclude_wells=[tuple(w) for w in exclude] if exclude else None,
             max_wells_per_label=cfg.get("max_wells_per_label"),
             max_samples_per_label=dataset_cfg.get("max_samples_per_label"),
@@ -318,7 +308,9 @@ def build_dataset(spec: DatasetSpec, shape_mode: str | None = "per_sample") -> l
     the individual steps instead, because it has to fit the label encoder and
     split by well in between.
     """
-    from utils.labels import limit_wells_per_label, resolve_labels_for_wells
+    from hydra.utils import instantiate
+
+    from utils.labels import limit_wells_per_label
 
     index = scan_directory(spec.root_dir)
     print(f"Scanned {spec.root_dir}: {len(index)} (plate, well, field) groups found.")
@@ -326,26 +318,22 @@ def build_dataset(spec: DatasetSpec, shape_mode: str | None = "per_sample") -> l
     wells = wells_from_index(index, spec.exclude_wells, spec.include_wells)
     print(f"{len(wells)} wells after filtering.")
 
-    if spec.label_source == "none":
+    if spec.label_provider is None:
         # Real data with no ground truth yet (e.g. live-traffic simulation
         # input): don't invent a label, just keep every well that passed the
         # include/exclude filters above.
         if spec.max_wells_per_label is not None:
             print("WARNING: max_wells_per_label is set but there is no label "
-                  "source ('use_mongodb: false' without 'dummy_labels: true') "
-                  "-- ignored, there are no label classes to limit per.")
+                  "provider configured -- ignored, there are no label classes "
+                  "to limit per.")
         labels = None
-        print(f"No label source configured -- samples will have no 'label' field "
+        print(f"No label provider configured -- samples will have no 'label' field "
               f"({len(wells)} wells).")
     else:
-        labels = resolve_labels_for_wells(
-            wells,
-            source=spec.label_source,
-            class_names=spec.dummy_class_names,
-            seed=spec.seed,
-        )
+        provider = instantiate(spec.label_provider)
+        labels = provider.get_labels_for_wells(wells)
         print(f"{len(labels)} / {len(wells)} wells resolved to a label "
-              f"(source={spec.label_source}).")
+              f"(provider={spec.label_provider.get('_target_', provider.__class__.__name__)}).")
         if not labels:
             return []
         labels = limit_wells_per_label(labels, spec.max_wells_per_label, verbose=spec.verbose)

@@ -15,11 +15,17 @@
 #   make register-benchmark-run CMD="python -m monitoring.register_benchmark \
 #       --manifest data/benchmark_v1/dataset_manifest.json"
 
-root_dir: "/mnt/O/BTSData/MeasurementData/MIG/MIG-Exp06-CP-40X-bin1X1_20230908_143704/MIG-Exp06-CP-40X-bin1X1"
+root_dir: "/mnt/O/MIG-Exp06-CP-40X-bin1X1"
 channels: [1, 2, 3, 4, 5]
 
-# MongoDB treatments (the same source training uses)
-use_mongodb: true
+# Label provider: _target_ selects the class, everything else is that class's
+# own constructor params (same pattern as configs/datamodule/*.yaml).
+label_provider:
+  _target_: utils.labels.CSVLabelsProvider
+  csv_path: "/mnt/O/plate_well_labels.csv"
+  plate_col: Plate
+  well_col: Well
+  label_col: Treatment  # this export's label column is 'Treatment', not 'label'
 
 # Wells reserved for the benchmark -- never trained on.
 include_wells: null

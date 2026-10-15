@@ -32,6 +32,33 @@ class RandomCropDatasetConfig:
 # No structured config needed — plain lists work with OmegaConf.
 
 
+# ── Label provider configs (nested inside datamodule) ─────────────────────
+# Instantiated via hydra.utils.instantiate() in MultiChannelDataModule.setup(),
+# same _target_ pattern as the dataset configs above -- a new label source is
+# a new provider class (get_labels_for_wells(wells) -> {(plate, well): label})
+# plus a YAML entry, no datamodule code change.
+@dataclass
+class MongoDBLabelProviderConfig:
+    _target_: str = "utils.labels.MongoDBLabelsProvider"
+    collection: str = "tags"
+
+
+@dataclass
+class CSVLabelProviderConfig:
+    _target_: str = "utils.labels.CSVLabelsProvider"
+    csv_path: str = MISSING
+    plate_col: str = "Plate"
+    well_col: str = "Well"
+    label_col: str = "label"
+
+
+@dataclass
+class DummyLabelProviderConfig:
+    _target_: str = "utils.labels.DummyLabelsProvider"
+    class_names: list[str] | None = None
+    seed: int = 42
+
+
 # ── Datamodule (dataloader-level config + nested dataset + transforms) ────
 @dataclass
 class DataModuleConfig:
@@ -43,7 +70,7 @@ class DataModuleConfig:
     batch_size: int = 16
     num_workers: int = 4
     pin_memory: bool = True
-    use_mongodb: bool = False
+    label_provider: Any = field(default_factory=MongoDBLabelProviderConfig)
     train_val_split: float = 0.8
     max_wells_per_label: int | None = None
     exclude_wells: Any | None = None

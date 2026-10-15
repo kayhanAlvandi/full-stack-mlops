@@ -255,8 +255,8 @@ def create_metadata_from_samples(
     wells_used = sorted({f"{s['plate']}/{s['well']}" for s in samples})
 
     # Unlabelled dataset (e.g. real production data with no ground truth
-    # yet, built with use_mongodb=false and no dummy_labels): samples have no
-    # 'label' key at all, so there is no class vocabulary to report.
+    # yet, built with label_provider=None): samples have no 'label' key at
+    # all, so there is no class vocabulary to report.
     has_labels = bool(samples) and 'label' in samples[0]
     if has_labels:
         labels = [s['label'] for s in samples]

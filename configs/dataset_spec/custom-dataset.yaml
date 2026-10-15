@@ -2,18 +2,17 @@
 ## production data to feed scripts/simulate_live_predictions.py), using
 ## scripts/build_dataset.py.
 ##
-## use_mongodb: false with dummy_labels left at its default (false) builds a
-## genuinely unlabelled dataset: samples have no 'label' key at all, matching
-## the API's own optional label field, instead of inventing pseudo-random
-## classes. Set dummy_labels: true only for local tests/offline dry-runs that
-## need something to balance/report on.
+## label_provider: null builds a genuinely unlabelled dataset: samples have no
+## 'label' key at all, matching the API's own optional label field, instead
+## of inventing pseudo-random classes. Set a utils.labels.DummyLabelsProvider
+## label_provider only for local tests/offline dry-runs that need something to
+## balance/report on.
 
-root_dir: "/mnt/O/BTSData/MeasurementData/MIG/MIG-Exp05-CP-40X-bin1X1_20230901_140858/MIG-Exp05-CP-40X-bin1X1"
+root_dir: "/mnt/O/MIG-Exp05-CP-40X-bin1X1"
 channels: [1, 2, 3, 4, 5]
 
-# No label source -- see note above.
-use_mongodb: false
-dummy_labels: false
+# No label provider -- see note above.
+label_provider: null
 
 include_wells: null
 exclude_wells: null

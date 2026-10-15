@@ -17,14 +17,8 @@ from PIL import Image
 from torch.utils.data import Dataset
 
 from utils.filename_parser import FILENAME_PATTERN
-from utils.labels import DEFAULT_DUMMY_CLASSES, resolve_labels_for_wells
 
-from .sample_selection import (
-    SUPPORTED_EXTENSIONS,
-    build_samples,
-    scan_directory,
-    wells_from_index,
-)
+from .sample_selection import SUPPORTED_EXTENSIONS, build_samples, scan_directory
 
 try:
     import pillow_jxl  # JXL support for PIL  # noqa: F401
@@ -401,85 +395,3 @@ class TiledMultiChannelDataset(Dataset):
         for sample_idx, _, _ in self.tiles:
             counts[sample_idx] += 1
         return counts
-
-
-class DummyLabelsProvider:
-    """Dummy label provider for testing without MongoDB.
-    
-    Generates random string labels based on plate/well combinations.
-    Replace with MongoDB-based provider in production.
-    
-    Label resolution itself lives in ``utils/labels.py`` (shared with the
-    monitoring jobs); this class is the well-discovery + lookup convenience
-    wrapper that takes a directory.
-    """
-    
-    # Default class names for dummy labels
-    DEFAULT_CLASSES: tuple[str, ...] = DEFAULT_DUMMY_CLASSES
-    
-    def __init__(self, class_names: list[str] | None = None, seed: int = 42):
-        self.class_names = class_names or self.DEFAULT_CLASSES
-        self.seed = seed
-    
-    def get_labels_for_wells(
-        self,
-        wells: list[tuple[str, str]] | set[tuple[str, str]],
-    ) -> dict[tuple[str, str], str]:
-        """Assign deterministic pseudo-random labels to the given wells."""
-        return resolve_labels_for_wells(
-            wells, source="dummy", class_names=self.class_names, seed=self.seed
-        )
-    
-    def get_labels(
-        self,
-        root_dir: str,
-        exclude_wells: list[tuple[str, str]] | None = None,
-    ) -> dict[tuple[str, str], str]:
-        """Discover wells under ``root_dir`` and label them.
-        
-        Args:
-            root_dir: Root directory containing images.
-            exclude_wells: List of (plate, well) tuples to exclude (corrupted images).
-        """
-        wells = wells_from_index(scan_directory(root_dir), exclude_wells=exclude_wells)
-        return self.get_labels_for_wells(wells)
-
-
-class MongoDBLabelsProvider:
-    """Label provider using MongoDB.
-    
-    Queries MongoDB to get labels for plate/well combinations.
-    
-    Label resolution itself lives in ``utils/labels.py`` (shared with the
-    monitoring jobs, which resolve labels for wells read out of the database
-    rather than off disk); this class is the directory-based wrapper.
-    """
-    
-    def __init__(
-        self,
-        collection: str = "tags",
-    ):
-        self.collection = collection
-    
-    def get_labels_for_wells(
-        self,
-        wells: list[tuple[str, str]] | set[tuple[str, str]],
-    ) -> dict[tuple[str, str], str]:
-        """Query MongoDB for the given wells' treatments."""
-        return resolve_labels_for_wells(
-            wells, source="mongodb", collection=self.collection
-        )
-    
-    def get_labels(
-        self,
-        root_dir: str,
-        exclude_wells: list[tuple[str, str]] | None = None,
-    ) -> dict[tuple[str, str], str]:
-        """Discover wells under ``root_dir`` and query MongoDB for their treatments.
-        
-        Args:
-            root_dir: Root directory containing images.
-            exclude_wells: List of (plate, well) tuples to exclude (corrupted images).
-        """
-        wells = wells_from_index(scan_directory(root_dir), exclude_wells=exclude_wells)
-        return self.get_labels_for_wells(wells)

@@ -1,8 +1,8 @@
 {
   "name": "benchmark_v1",
-  "dataset_version": "no_git_1b06b451",
+  "dataset_version": "no_git_c075e2fb",
   "dataset_code_commit": null,
-  "config_hash": "1b06b4511554321ff10706a318ccae95",
+  "config_hash": "c075e2fb4d77d6f31bae2816e3b0a4d2",
   "has_uncommitted_changes": false,
   "num_classes": 4,
   "class_names": [
@@ -60,7 +60,7 @@
   ],
   "num_wells": 38,
   "spec": {
-    "root_dir": "/mnt/O/BTSData/MeasurementData/MIG/MIG-Exp06-CP-40X-bin1X1_20230908_143704/MIG-Exp06-CP-40X-bin1X1",
+    "root_dir": "/mnt/O/MIG-Exp06-CP-40X-bin1X1",
     "channels": [
       1,
       2,
@@ -68,14 +68,19 @@
       4,
       5
     ],
-    "use_mongodb": true,
+    "label_provider": {
+      "_target_": "utils.labels.CSVLabelsProvider",
+      "csv_path": "/mnt/O/plate_well_labels.csv",
+      "plate_col": "Plate",
+      "well_col": "Well",
+      "label_col": "Treatment"
+    },
     "exclude_wells": null,
     "include_wells": null,
     "max_wells_per_label": null,
     "max_samples_per_label": 16,
     "seed": 42,
     "verbose": true,
-    "name": "benchmark_v1",
-    "dummy_class_names": null
+    "name": "benchmark_v1"
   }
 }

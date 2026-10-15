@@ -10,6 +10,7 @@ services:
       - ${O_DRIVE_PATH}:/mnt/O:rw # dataset access
       - ${TOOLS_LIB_PATH}:/workspace/tools:ro # access to tools library
       - ../../..:/workspace:rw # project root
+      - hf_cache:/root/.cache/huggingface # persist pretrained-weight downloads across --rm runs
     deploy:
       resources:
         reservations:
@@ -23,3 +24,6 @@ services:
 networks:
   ml-platform:
     external: true
+
+volumes:
+  hf_cache:

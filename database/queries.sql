@@ -24,3 +24,19 @@ ORDER BY table_name;
 Select * FROM tile_channel_stats;
 
 Select * FROM live_image_prediction;
+
+Select * FROM benchmark_dataset;
+
+TRUNCATE TABLE
+  image_metadata,
+  tile_stack,
+  tile_stack_member,
+  tile_channel_stats,
+  image_prediction,
+  tile_prediction,
+  benchmark_dataset,
+  benchmark_dataset_member,
+  drift_report,
+  drift_report_column,
+  quality_report
+RESTART IDENTITY CASCADE;

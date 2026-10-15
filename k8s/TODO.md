@@ -22,6 +22,20 @@ first. This is fragile and couples the pull behavior to which make target ran.
 `bootstrap` vs `bootstrap-dev` split. This is the natural place to also move the
 API/job manifests under overlay management if desired.
 
+**Hit in practice (2026-10-15):** `register-benchmark`/`label-backfill`
+(`jobs/register-benchmark.yaml`, `jobs/label-backfill.yaml`) have no
+`imagePullPolicy` set, so the `:latest`-tag default (`Always`) applies -- a pod
+got stuck in `ContainerCreating`/`Pulling` for 15+ minutes against
+`ghcr.io/.../monitoring:latest` with no progress (likely the same flaky
+network path seen elsewhere this session, e.g. slow HF Hub downloads during
+training). The same `imagePullPolicy: IfNotPresent` + local
+build/`kind load docker-image` fix already used for the api image
+(`build-api-image`/`load-api-image` in `k8s/Makefile`) would apply here too
+(`docker/jobs/monitoring/Dockerfile` is self-contained and already used for
+`register-benchmark`/`label-backfill`/`drift-report`/`quality-report`), but
+was reverted for now -- fold it into the Kustomize overlay fix above instead
+of patching each job file ad hoc.
+
 **Status:** not started.
 
 ## ghcr-pull secret must exist in both namespaces

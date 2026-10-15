@@ -14,6 +14,7 @@ spec:
                 - name: label-backfill
                   image: ghcr.io/kayhanalvandi/full-stack-mlops/monitoring:latest
                   command: ["python","-m" ,"monitoring.backfill_labels"]
+                  args: ["--source", "csv", "--csv-path", "/mnt/O/plate_well_labels.csv", "--label-col", "Treatment"]
                   envFrom:
                     - secretRef:
                         name: monitoring-secret

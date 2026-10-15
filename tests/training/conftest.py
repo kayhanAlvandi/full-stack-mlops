@@ -96,7 +96,10 @@ def tiled_datamodule(synthetic_image_dir, balanced_labels, monkeypatch):
         def get_labels(self, root_dir, exclude_wells=None):
             return dict(forced)
 
-    monkeypatch.setattr("src.datamodule.DummyLabelsProvider", _StubProvider)
+    # instantiate() resolves label_provider._target_ by importing the module and
+    # reading the live attribute off it, so patching utils.labels.DummyLabelsProvider
+    # (the actual _target_) is what's seen.
+    monkeypatch.setattr("utils.labels.DummyLabelsProvider", _StubProvider)
 
     d = synthetic_image_dir
     dataset_cfg = OmegaConf.create({
@@ -110,6 +113,7 @@ def tiled_datamodule(synthetic_image_dir, balanced_labels, monkeypatch):
         "verbose": False,
     })
     transform_cfg = [{"name": "Normalize"}]
+    label_provider_cfg = OmegaConf.create({"_target_": "utils.labels.DummyLabelsProvider"})
 
     return MultiChannelDataModule(
         dataset=dataset_cfg,
@@ -120,5 +124,5 @@ def tiled_datamodule(synthetic_image_dir, balanced_labels, monkeypatch):
         num_workers=0,
         pin_memory=False,
         train_val_split=0.5,
-        use_mongodb=False,
+        label_provider=label_provider_cfg,
     )

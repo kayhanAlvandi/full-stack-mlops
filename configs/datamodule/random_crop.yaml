@@ -3,7 +3,13 @@ _target_: src.datamodule.MultiChannelDataModule
 batch_size: 64
 num_workers: 0
 pin_memory: true
-use_mongodb: true
+
+# Label provider: _target_ selects the class, everything else is that class's
+# own constructor params. See configs/datamodule/tiled.yaml for a csv example.
+label_provider:
+  _target_: utils.labels.MongoDBLabelsProvider
+  collection: tags
+
 train_val_split: 0.5
 max_wells_per_label: 2
 exclude_wells:
@@ -13,7 +19,7 @@ exclude_wells:
 
 dataset:
   _target_: src.dataset.MultiChannelImageDataset
-  root_dir: "O:\\BTSData\\MeasurementData\\MIG\\MIG-Exp03-CP-40X-bin1X1_20230831_143904\\MIG-Exp03-CP-40X-bin1X1"
+  root_dir: "/mnt/O/MIG-Exp03-CP-40X-bin1X1"
   channels: [1, 2, 3, 4, 5]
   crop_size: 224
 

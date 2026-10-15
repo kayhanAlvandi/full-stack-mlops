@@ -2,7 +2,8 @@
 import pytest
 import torch
 
-from src.dataset import DummyLabelsProvider, LabelEncoder, MultiChannelImageDataset
+from src.dataset import LabelEncoder, MultiChannelImageDataset
+from utils.labels import DummyLabelsProvider
 
 # ── LabelEncoder ────────────────────────────────────────────────────────────
 

@@ -119,6 +119,31 @@ when `compute_predictions_references.py` needs to scale beyond a single GPU.
 Kubernetes horizontal scaling (step 7) uses the same pattern at
 larger scale with a job queue.
 
+## Labels: migrate CSV lookup into Postgres (future)
+
+**Context:**
+Ground-truth labels now come from a `Plate,Well,Treatment` CSV export
+(`utils.labels.CSVLabelsProvider`, used via `label_provider` config in
+`configs/datamodule/*.yaml` and `configs/dataset_spec/*.yaml`) instead of
+MongoDB, since the MongoDB-backed `tools.loading.getCategories` lookup isn't
+always available. The CSV is a flat-file stand-in, not a real data model: it's
+hand-exported, has no versioning/history, and every label query re-reads and
+re-parses the whole file.
+
+**Idea:** migrate plate/well labels into a proper table in the existing
+Postgres instance (e.g. `well_label(plate, well, label, ...)`), and add a
+`PostgresLabelsProvider` alongside `MongoDBLabelsProvider`/`CSVLabelsProvider`
+in `utils/labels.py` (same `get_labels_for_wells()` interface, so
+`label_provider: {_target_: ...}` configs keep working unchanged).
+
+**Why not now:** this needs real scope -- a DB connection path for *training*
+(today only the monitoring/API images talk to Postgres; the training image
+currently doesn't), schema/migration for the new table, and a one-time
+CSV-to-table import script. Not a priority while the CSV provider already
+unblocks training/benchmarking.
+
+**Status:** not started, revisit if/when time allows.
+
 ## Benchmark dataset tracking (future)
 
 - [ ] Add persistent version and lineage tracking for benchmark datasets,

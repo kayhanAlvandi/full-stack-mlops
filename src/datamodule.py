@@ -10,12 +10,7 @@ from torch.utils.data import DataLoader
 
 from utils.labels import limit_wells_per_label
 
-from .dataset import (
-    DummyLabelsProvider,
-    LabelEncoder,
-    MongoDBLabelsProvider,
-    TiledMultiChannelDataset,
-)
+from .dataset import LabelEncoder, TiledMultiChannelDataset
 from .sample_selection import build_samples, scan_directory, wells_from_index
 from .transforms import build_batch_transform, build_transforms
 
@@ -41,7 +36,7 @@ class MultiChannelDataModule(pl.LightningDataModule):
         num_workers: int = 4,
         pin_memory: bool = True,
         train_val_split: float = 0.66,
-        use_mongodb: bool = False,
+        label_provider: DictConfig | dict | None = None,
         max_wells_per_label: int | None = None,
         exclude_wells: list | None = None,
     ):
@@ -57,7 +52,16 @@ class MultiChannelDataModule(pl.LightningDataModule):
             num_workers: Number of workers for data loading.
             pin_memory: Whether to pin memory for faster GPU transfer.
             train_val_split: Fraction of data for training (rest for validation).
-            use_mongodb: Whether to use MongoDB for labels.
+            label_provider: Hydra config for the label provider (contains
+                _target_, e.g. ``utils.labels.MongoDBLabelsProvider`` /
+                ``CSVLabelsProvider`` / ``DummyLabelsProvider``, plus that
+                class's own constructor params). Instantiated with
+                ``hydra.utils.instantiate()``, same pattern as ``dataset`` --
+                a custom label provider just needs a new class with a
+                ``get_labels_for_wells(wells) -> {(plate, well): label}``
+                method and a YAML pointing ``_target_`` at it, no code change
+                here. Training always needs real labels, so the provider must
+                resolve every requested well (there is no "none" option here).
             max_wells_per_label: Max wells per label class (None = all).
             exclude_wells: List of [plate, well] pairs to exclude (corrupted images).
         """
@@ -70,7 +74,9 @@ class MultiChannelDataModule(pl.LightningDataModule):
             raw = OmegaConf.to_container(exclude_wells) if hasattr(exclude_wells, '_metadata') else exclude_wells
             exclude_wells = [tuple(w) for w in raw]
         
-        self.save_hyperparameters(ignore=["dataset", "train_transform", "val_transform", "batch_transform"])
+        self.save_hyperparameters(
+            ignore=["dataset", "train_transform", "val_transform", "batch_transform", "label_provider"]
+        )
         
         self.dataset_cfg = dataset
         self.train_transform_cfg = train_transform
@@ -80,7 +86,12 @@ class MultiChannelDataModule(pl.LightningDataModule):
         self.num_workers = num_workers
         self.pin_memory = pin_memory
         self.train_val_split = train_val_split
-        self.use_mongodb = use_mongodb
+        if label_provider is None:
+            raise ValueError(
+                "label_provider is required (a Hydra config with _target_ pointing at a "
+                "label provider class, e.g. src.dataset.MongoDBLabelsProvider)."
+            )
+        self.label_provider_cfg = label_provider
         self.max_wells_per_label = max_wells_per_label
         self.exclude_wells = exclude_wells
         
@@ -110,12 +121,11 @@ class MultiChannelDataModule(pl.LightningDataModule):
         self.file_index = scan_directory(self.root_dir)
         wells = wells_from_index(self.file_index, exclude_wells=self.exclude_wells)
         
-        # Get labels (string labels)
-        if self.use_mongodb:
-            labels_provider = MongoDBLabelsProvider()
-        else:
-            labels_provider = DummyLabelsProvider()
-        
+        # Get labels (string labels). The provider class and its own params
+        # (csv_path, collection, class_names, ...) are fully determined by the
+        # label_provider config's _target_ -- adding a new label source is a
+        # new class + YAML, no change needed here.
+        labels_provider = instantiate(self.label_provider_cfg)
         labels_dict = labels_provider.get_labels_for_wells(wells)
         
         if len(labels_dict) == 0:

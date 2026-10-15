@@ -6,7 +6,7 @@ python train.py dataset_name=4wells_per_label_16samples_morecache \
     trainer=trainer_container \
     trainer.max_epochs=1 \
     optimizer=adamw_cosine \
-    datamodule.dataset.root_dir=/mnt/O/BTSData/MeasurementData/MIG/MIG-Exp03-CP-40X-bin1X1_20230831_143904/MIG-Exp03-CP-40X-bin1X1 \
+    datamodule.dataset.root_dir=/mnt/O/MIG-Exp03-CP-40X-bin1X1 \
     run_name=test_container
 
 ## example command for training from outside container
@@ -18,5 +18,8 @@ CMD="python train.py \
     trainer=trainer_container \
     trainer.max_epochs=1 \
     optimizer=adamw_cosine \
-    datamodule.dataset.root_dir=/mnt/O/BTSData/MeasurementData/MIG/MIG-Exp03-CP-40X-bin1X1_20230831_143904/MIG-Exp03-CP-40X-bin1X1 \
+    datamodule.dataset.root_dir=/mnt/O/MIG-Exp03-CP-40X-bin1X1 \
     run_name=test_container_oneoff"
+
+or
+make train-run CMD="python train.py --config-path /workspace/configs_downloaded/whatever --config-name hydra_config.yaml"

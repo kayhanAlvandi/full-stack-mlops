@@ -18,3 +18,6 @@ tensorboard>=2.14.0
 pandas>=2.0.0
 psutil>=5.9.0
 ipykernel>=6.0.0
+# Rust-based parallel downloader for Hugging Face Hub pretrained weights
+# (timm backbones) -- enabled via HF_HUB_ENABLE_HF_TRANSFER=1.
+hf_transfer>=0.1.6

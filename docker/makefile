@@ -43,10 +43,11 @@ quality-report-run: network
 		$(if $(CMD),$(CMD),python -m monitoring.run_quality_report)
 
 # Usage: make label-backfill-run
-# Backfills t_label on production predictions from MongoDB, global by well.
+#    or: make label-backfill-run CMD="python -m monitoring.backfill_labels --source csv --csv-path /mnt/O/plate_well_labels.csv --label-col Treatment"
+# Backfills t_label on production predictions from MongoDB (default) or a CSV, global by well.
 label-backfill-run: network
 	docker compose -f jobs/monitoring/docker-compose.yaml run --rm label-backfill \
-		$(if $(CMD),$(CMD),python -m monitoring.backfill_labels)
+		$(if $(CMD),$(CMD),"python -m monitoring.backfill_labels --source csv --csv-path /mnt/O/plate_well_labels.csv --label-col Treatment")
 
 # Usage: make create-benchmark NAME=benchmark_v1
 #    (optional extra hydra overrides: ARGS="dataset_spec.max_samples_per_label=4")
