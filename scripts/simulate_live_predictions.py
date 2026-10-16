@@ -32,6 +32,8 @@ Usage:
     python scripts/simulate_live_predictions.py --manifest data/live_v1/dataset_manifest.json \\
         --count 20 --min-interval 30 --max-interval 90 --base-url http://192.168.1.10:8000
 """
+from __future__ import annotations
+
 import argparse
 import json
 import platform
@@ -46,23 +48,21 @@ import requests
 _MNT_DRIVE_RE = re.compile(r"^/mnt/([A-Za-z])(/.*)?$")
 
 
-def local_root_path(root_path: str) -> Path:
+def local_root_path(root_path: str, data_root: str | None = None) -> Path:
     """Resolve a manifest's ``root_path`` to a path readable on this machine.
 
-    Manifests are typically built inside Docker/WSL, where a mounted Windows
-    network drive shows up as ``/mnt/<letter>/...``. This script is meant to
-    run directly on the Windows host (see module docstring), where that path
-    doesn't exist -- only ``<letter>:\\...`` does. On Windows, translate the
-    ``/mnt/<letter>`` prefix to a drive letter; elsewhere (Linux/WSL/inside a
-    container), the manifest path is already correct as-is.
+    With ``data_root``, the manifest's ``/mnt/<letter>`` mount prefix is
+    replaced by that host directory (the mounted drive's contents live
+    directly under it), keeping any path remainder intact. Without it:
+    on Windows, translate ``/mnt/<letter>/...`` to a drive letter; elsewhere
+    the manifest path is already correct as-is.
     """
-    if platform.system() != "Windows":
-        return Path(root_path)
-
     match = _MNT_DRIVE_RE.match(root_path.replace("\\", "/"))
-    if not match:
+    if data_root:
+        rest = (match.group(2) or "").lstrip("/") if match else root_path.lstrip("/")
+        return Path(data_root, rest) if rest else Path(data_root)
+    if platform.system() != "Windows" or not match:
         return Path(root_path)
-
     drive, rest = match.group(1).upper(), match.group(2) or ""
     return Path(f"{drive}:{rest}")
 
@@ -80,7 +80,8 @@ def load_manifest_samples(manifest_path: str) -> list[dict]:
     return samples
 
 
-def send_sample(base_url: str, sample: dict, timeout: float) -> dict:
+def send_sample(base_url: str, sample: dict, timeout: float,
+                data_root: str | None = None) -> dict:
     """POST one sample's channel files to /predict, one file per channel.
 
     Mirrors tests/diagnostics/test_predict_api.py's multipart shape: files
@@ -91,7 +92,7 @@ def send_sample(base_url: str, sample: dict, timeout: float) -> dict:
     only the *local* file read is translated for this host.
     """
     manifest_root_path = sample["root_path"]
-    read_root = local_root_path(manifest_root_path)
+    read_root = local_root_path(manifest_root_path, data_root)
     channel_items = sorted(sample["channel_files"].items(), key=lambda kv: int(kv[0]))
 
     with ExitStack() as stack:
@@ -118,6 +119,9 @@ def main():
                         help="Path to a dataset manifest built by scripts/build_dataset.py.")
     parser.add_argument("--base-url", default="http://127.0.0.1:8000",
                         help="Base URL of the running API (default: %(default)s).")
+    parser.add_argument("--data-root", default=None,
+                    help="Host directory holding what the manifest's /mnt/<letter> "
+                         "mount root points at (e.g. D:\\personal_project\\microscopy_data).")
     parser.add_argument("--min-interval", type=float, default=10.0,
                         help="Minimum seconds between requests (default: %(default)s).")
     parser.add_argument("--max-interval", type=float, default=50.0,
@@ -160,7 +164,7 @@ def main():
 
                 key = (sample["plate"], sample["well"], sample["field"])
                 try:
-                    result = send_sample(args.base_url, sample, args.timeout)
+                    result = send_sample(args.base_url, sample, args.timeout, args.data_root)
                     n_sent += 1
                     print(f"[{n_sent + n_failed}] {key} -> {result.get('predicted_class')} "
                           f"(run_id={result.get('run_id')})")

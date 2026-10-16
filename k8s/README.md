@@ -128,6 +128,11 @@ Typical order when validating from scratch: `register-benchmark` →
 kubectl get pods -A
 kubectl get hpa -n api
 
+# HPA TARGETS stays <unknown> until metrics-server reports; verify it works:
+kubectl get pods -n kube-system -l k8s-app=metrics-server
+kubectl top nodes
+kubectl top pods -n api
+
 # Reach the external services from inside the cluster
 kubectl run -it --rm netcheck -n api --image=busybox --restart=Never -- \
   sh -c 'nc -zv host.docker.internal 5432; nc -zv host.docker.internal 5000'

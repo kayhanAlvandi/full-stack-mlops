@@ -23,6 +23,12 @@ MLFLOW_DATA_PATH := $(abspath ../mlflow-data/mlruns)
 
 export DATA_PATH REPORTS_PATH MLFLOW_DATA_PATH
 
+# targets share names with real dirs/files (addons/, api/, jobs/) -- without
+# .PHONY, make treats e.g. `addons` as up-to-date and silently skips the recipe
+.PHONY: kind-up kind-down addons bootstrap bootstrap-dev \
+	build-api-image load-api-image \
+	simulate-internal simulate-internal-clean simulate-external
+
 CLUSTER_NAME := image-classifier
 
 # Must match the image: in k8s/api/api-deployement.yaml -- bootstrap-dev
@@ -87,8 +93,9 @@ bootstrap-dev: load-api-image addons
 #   make simulate-external EXTERNAL_ARGS="--manifest ../data/custom_v1/dataset_manifest.json --loop"
 SIM_POD := simulate-live
 SIM_SCRIPT := ../scripts/simulate_live_predictions.py
-INTERNAL_ARGS ?= --manifest /mnt/data/custom_v1/dataset_manifest.json --count 10
-EXTERNAL_ARGS ?= --manifest ../data/custom_v1/dataset_manifest.json --count 10
+INTERNAL_ARGS ?= --manifest /mnt/data/custom_v1/dataset_manifest.json --count 10 --min-interval 0 --max-interval 1
+EXTERNAL_ARGS ?= --manifest ../data/custom_v1/dataset_manifest.json --count 10 --min-interval 0 --max-interval 1
+Windows_O_Drive_Path := D:\personal_project\microscopy_data
 
 simulate-internal:
 	kubectl apply -f jobs/debug-simulate-live.yaml
@@ -103,5 +110,5 @@ simulate-internal-clean:
 	kubectl delete -f jobs/debug-simulate-live.yaml --ignore-not-found
 
 simulate-external:
-	python $(SIM_SCRIPT) --base-url http://api.localtest.me $(EXTERNAL_ARGS)
+	python $(SIM_SCRIPT) --base-url http://api.localtest.me --data-root $(Windows_O_Drive_Path) $(EXTERNAL_ARGS)
 

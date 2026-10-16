@@ -41,6 +41,7 @@ services:
     volumes:
       - ${TOOLS_LIB_PATH}:/app/tools:ro # access to tools library (mongodb source only)
       - ../../../data:/app/data:ro # Plate,Well,label CSV (csv source only)
+      - ${O_DRIVE_PATH}:/mnt/O:ro # labels csv file is here now
     networks:
       - pg_network
 

@@ -22,8 +22,14 @@ spec:
                     - name: tools
                       mountPath: /app/tools
                       readOnly: true
+                    - name: o-drive
+                      mountPath: /mnt/O
+                      readOnly: true
             volumes:
               - name: tools
                 hostPath:
                   path: /mnt/tools
+              - name: o-drive
+                hostPath:
+                  path: /mnt/o-drive
             restartPolicy: Never
