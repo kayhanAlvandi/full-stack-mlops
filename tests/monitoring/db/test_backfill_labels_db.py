@@ -12,7 +12,7 @@ Two layers, both against real PostgreSQL (schemas 01-04):
 """
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import monitoring.backfill_labels as backfill
 from tests.monitoring.db.conftest import (
@@ -26,6 +26,22 @@ from tests.monitoring.db.conftest import make_image_prediction_tuple as _pred
 
 def _set_db_uri(monkeypatch):
     monkeypatch.setenv("MONITORING_DB_URI", DB_TEST_URI)
+
+
+def _run_main(monkeypatch, labels=None):
+    """Run backfill.main() with --source mongodb, stubbing the resolved labels.
+
+    --source mongodb needs no extra required CLI args (unlike csv's
+    --csv-path), and MongoDBLabelsProvider is patched before construction so
+    no real MongoDB/tools import happens.
+    """
+    monkeypatch.setattr("sys.argv", ["backfill_labels", "--source", "mongodb"])
+    mock_provider = MagicMock()
+    mock_provider.get_labels_for_wells.return_value = labels or {}
+    with patch("monitoring.backfill_labels.MongoDBLabelsProvider",
+               return_value=mock_provider):
+        backfill.main()
+    return mock_provider.get_labels_for_wells
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -144,26 +160,26 @@ class TestMain:
         makes has_db_uri deterministically False.
         """
         monkeypatch.setenv("MONITORING_DB_URI", "")
+        monkeypatch.setattr("sys.argv", ["backfill_labels", "--source", "mongodb"])
         assert backfill.main() is None
 
     def test_db_connection_failure(self, monkeypatch):
         """An unreachable DB URI makes main() return cleanly instead of raising."""
         monkeypatch.setenv("MONITORING_DB_URI", "postgresql://baduser:badpass@localhost:1/nope")
+        monkeypatch.setattr("sys.argv", ["backfill_labels", "--source", "mongodb"])
         assert backfill.main() is None
 
     def test_no_unlabeled_wells(self, monkeypatch, db_logger):
-        """With no unlabeled production rows, resolve_labels is never called."""
+        """With no unlabeled production rows, the provider is never queried."""
         _set_db_uri(monkeypatch)
-        with patch("monitoring.backfill_labels.resolve_labels") as mock_resolve:
-            backfill.main()
-        mock_resolve.assert_not_called()
+        mock_get_labels = _run_main(monkeypatch)
+        mock_get_labels.assert_not_called()
 
     def test_no_labels_resolved_writes_nothing(self, monkeypatch, db_logger):
-        """When MongoDB resolves no labels, no t_label is written."""
+        """When the provider resolves no labels, no t_label is written."""
         _set_db_uri(monkeypatch)
         db_logger.log_image_prediction(_pred(well="K07", t_label=None))
-        with patch("monitoring.backfill_labels.resolve_labels", return_value={}):
-            backfill.main()
+        _run_main(monkeypatch, labels={})
         with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute("SELECT t_label FROM image_prediction WHERE well = %s", ("K07",))
             assert cur.fetchone()[0] is None
@@ -175,11 +191,9 @@ class TestMain:
         db_logger.log_image_prediction(_pred(well="K07", t_label=None))
         db_logger.log_image_prediction(_pred(well="K08", t_label=None))
         labels = {(PLATE, "K07"): "ClassA", (PLATE, "K08"): "ClassB"}
-        with patch("monitoring.backfill_labels.resolve_labels",
-                   return_value=labels) as mock_resolve:
-            backfill.main()
+        mock_get_labels = _run_main(monkeypatch, labels=labels)
 
-        called_wells = set(mock_resolve.call_args[0][0])
+        called_wells = set(mock_get_labels.call_args[0][0])
         assert {(PLATE, "K07"), (PLATE, "K08")} <= called_wells
 
         with db_logger.pool.connection() as conn, conn.cursor() as cur:
@@ -188,15 +202,13 @@ class TestMain:
 
     def test_labels_updated_never_overwrites_existing_label(self, monkeypatch, db_logger):
         """A production row that already has a t_label is left untouched, even
-        if MongoDB resolves a (possibly different) label for its well."""
+        if the provider resolves a (possibly different) label for its well."""
         _set_db_uri(monkeypatch)
         db_logger.log_image_prediction(_pred(well="K07", t_label="AlreadySet"))
         # fetch_unlabeled_wells only returns wells with a NULL t_label row, so
-        # this well wouldn't normally reach resolve_labels at all; simulate the
+        # this well wouldn't normally reach the provider at all; simulate the
         # defensive case where update_t_label is still asked to write to it.
-        with patch("monitoring.backfill_labels.resolve_labels",
-                   return_value={(PLATE, "K07"): "ClassA"}):
-            backfill.main()
+        _run_main(monkeypatch, labels={(PLATE, "K07"): "ClassA"})
         with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute("SELECT t_label FROM image_prediction WHERE well = %s", ("K07",))
             assert cur.fetchone()[0] == "AlreadySet"
@@ -206,9 +218,7 @@ class TestMain:
         tile_prediction rows -- update_t_label keeps them in one transaction."""
         _set_db_uri(monkeypatch)
         img_pred_id = insert_image_and_tile_prediction(db_logger, well="K07", t_label=None)
-        with patch("monitoring.backfill_labels.resolve_labels",
-                   return_value={(PLATE, "K07"): "ClassA"}):
-            backfill.main()
+        _run_main(monkeypatch, labels={(PLATE, "K07"): "ClassA"})
         with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute("SELECT t_label FROM image_prediction WHERE id = %s", (img_pred_id,))
             assert cur.fetchone()[0] == "ClassA"
@@ -218,19 +228,17 @@ class TestMain:
 
     def test_reference_and_benchmark_rows_untouched(self, monkeypatch, db_logger):
         """Unlabeled reference/benchmark rows for the same well are neither
-        passed to resolve_labels (fetch_unlabeled_wells only sees production
+        passed to the provider (fetch_unlabeled_wells only sees production
         rows) nor updated (update_t_label filters them again defensively)."""
         _set_db_uri(monkeypatch)
         db_logger.log_image_prediction(_pred(well="K07", t_label=None))                     # production
         db_logger.log_image_prediction(_pred(well="K07", t_label=None, is_reference=True))  # reference
         bid, _ = insert_benchmark_sample(db_logger, well="K08", t_label="ClassB")
         db_logger.log_image_prediction(_pred(well="K08", t_label=None, benchmark_id=bid))   # benchmark
-        with patch("monitoring.backfill_labels.resolve_labels",
-                   return_value={(PLATE, "K07"): "ClassA"}) as mock_resolve:
-            backfill.main()
+        mock_get_labels = _run_main(monkeypatch, labels={(PLATE, "K07"): "ClassA"})
 
-        # Only the production well is looked up in MongoDB.
-        assert set(mock_resolve.call_args[0][0]) == {(PLATE, "K07")}
+        # Only the production well is looked up.
+        assert set(mock_get_labels.call_args[0][0]) == {(PLATE, "K07")}
 
         with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute("""
@@ -244,16 +252,13 @@ class TestMain:
             ]
 
     def test_rerun_is_idempotent(self, monkeypatch, db_logger):
-        """A second main() run finds no unlabeled wells left, so resolve_labels
-        is never called and nothing is rewritten."""
+        """A second main() run finds no unlabeled wells left, so the provider
+        is never queried and nothing is rewritten."""
         _set_db_uri(monkeypatch)
         db_logger.log_image_prediction(_pred(well="K07", t_label=None))
-        with patch("monitoring.backfill_labels.resolve_labels",
-                   return_value={(PLATE, "K07"): "ClassA"}):
-            backfill.main()
-        with patch("monitoring.backfill_labels.resolve_labels") as mock_resolve:
-            backfill.main()
-        mock_resolve.assert_not_called()
+        _run_main(monkeypatch, labels={(PLATE, "K07"): "ClassA"})
+        mock_get_labels = _run_main(monkeypatch)
+        mock_get_labels.assert_not_called()
         with db_logger.pool.connection() as conn, conn.cursor() as cur:
             cur.execute("SELECT DISTINCT t_label FROM image_prediction")
             assert cur.fetchall() == [("ClassA",)]
